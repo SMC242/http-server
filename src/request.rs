@@ -163,4 +163,10 @@ mod tests {
             "Parsing unsupported methods should fail"
         );
     }
+
+    #[test]
+    fn test_http_version_parse_no_version() {
+        convert::TryInto::<HTTPVersion>::try_into("HTTP/".to_string())
+            .expect_err("Parsing strings without versions should fail");
+    }
 }
