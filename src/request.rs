@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Not};
 
 type HTTPHeaders = HashMap<String, String>;
 
@@ -38,6 +38,15 @@ fn is_newline(c: &char) -> bool {
     matches!(c, '\r' | '\n')
 }
 
+fn take_until<F, T, Iter>(pred: F, iter: &mut Iter) -> Vec<T>
+where
+    F: Fn(&T) -> bool,
+    T: PartialEq,
+    Iter: Iterator<Item = T>,
+{
+    iter.take_while(|x| !pred(x)).collect::<Vec<T>>()
+}
+
 impl TryFrom<String> for HTTPVersion {
     type Error = RequestParseError;
 
@@ -47,10 +56,7 @@ impl TryFrom<String> for HTTPVersion {
         }
 
         let mut iter = value.chars();
-        let protocol: String = iter
-            .by_ref()
-            .take_while(|c| *c != '/' && *c != '\r')
-            .collect();
+        let protocol = String::from_iter(take_until(|x| *x == '/' || is_newline(x), iter.by_ref()));
         if protocol.is_empty() {
             return Err(RequestParseError::MissingVersion);
         }
@@ -58,11 +64,7 @@ impl TryFrom<String> for HTTPVersion {
             return Err(RequestParseError::NotHTTP);
         }
 
-        match iter
-            .take_while(|c| !is_newline(c))
-            .collect::<String>()
-            .as_str()
-        {
+        match String::from_iter(take_until(is_newline, &mut iter)).as_str() {
             "" => Err(RequestParseError::MissingVersion),
             "1.1" => Ok(HTTPVersion::V1_1),
             "2.2" => Ok(HTTPVersion::V2_2),
