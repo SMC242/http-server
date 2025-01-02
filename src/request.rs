@@ -84,44 +84,45 @@ impl FromStr for HTTPMethod {
     }
 }
 
-//impl TryFrom<String> for Request {
-//    type Error = RequestParseError;
-//
-//    fn try_from(s: String) -> Result<Request, RequestParseError> {
-//        let s_iter = s.chars();
-//        let method: String = s_iter.take_while(|c| *c != ' ' && !is_newline(c)).collect();
-//        if method.is_empty() {
-//            return Err(RequestParseError::MissingMethod);
-//        }
-//        s_iter.next();
-//
-//        let path: String = s_iter.take_while(|c| *c != ' ' && !is_newline(c)).collect();
-//        if path.is_empty() {
-//            return Err(RequestParseError::MissingPath);
-//        }
-//        s_iter.next();
-//
-//        let http_version_string: String = s_iter.take_while(|c| !is_newline(c)).collect();
-//        if http_version_string.is_empty() {
-//            return Err(RequestParseError::MissingVersion);
-//        }
-//        if http_version_string.contains(' ') {
-//            return Err(RequestParseError::MalformedHeaders);
-//        }
-//
-//        let http_version: HTTPVersion = http_version_string.try_into()?;
-//
-//        // TODO: parse headers
-//        let headers = HashMap::new();
-//
-//        Ok(Request {
-//            method: method,
-//            path: path,
-//            http_version: http_version,
-//            headers: headers,
-//        })
-//    }
-//}
+impl TryFrom<String> for Request {
+    type Error = RequestParseError;
+
+    fn try_from(s: String) -> Result<Request, RequestParseError> {
+        let s_iter = s.chars();
+        let method: String = s_iter.take_while(|c| *c != ' ' && !is_newline(c)).collect();
+        if method.is_empty() {
+            return Err(RequestParseError::MissingMethod);
+        }
+        let parsed_method = HTTPMethod::from_str(method.as_str())?;
+        s_iter.next();
+
+        let path: String = s_iter.take_while(|c| *c != ' ' && !is_newline(c)).collect();
+        if path.is_empty() {
+            return Err(RequestParseError::MissingPath);
+        }
+        s_iter.next();
+
+        let http_version_string: String = s_iter.take_while(|c| !is_newline(c)).collect();
+        if http_version_string.is_empty() {
+            return Err(RequestParseError::MissingVersion);
+        }
+        if http_version_string.contains(' ') {
+            return Err(RequestParseError::MalformedHeaders);
+        }
+
+        let http_version = HTTPVersion::from_str(&http_version_string)?;
+
+        // TODO: parse headers
+        let headers = HashMap::new();
+
+        Ok(Request {
+            method: parsed_method,
+            path,
+            http_version,
+            headers,
+        })
+    }
+}
 
 #[cfg(test)]
 mod tests {
