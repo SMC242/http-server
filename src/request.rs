@@ -91,13 +91,13 @@ impl FromStr for Request {
     fn from_str(s: &str) -> Result<Request, RequestParseError> {
         let mut s_iter = s.chars();
         let method =
-            String::from_iter(take_until(|c| *c != ' ' && !is_newline(c), s_iter.by_ref()));
+            String::from_iter(take_until(|c| *c == ' ' && !is_newline(c), s_iter.by_ref()));
         if method.is_empty() {
             return Err(RequestParseError::MissingMethod);
         }
         let parsed_method = HTTPMethod::from_str(method.as_str())?;
 
-        let path = String::from_iter(take_until(|c| *c != ' ' && !is_newline(c), s_iter.by_ref()));
+        let path = String::from_iter(take_until(|c| *c == ' ' && !is_newline(c), s_iter.by_ref()));
         if path.is_empty() {
             return Err(RequestParseError::MissingPath);
         }
