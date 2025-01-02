@@ -84,10 +84,10 @@ impl FromStr for HTTPMethod {
     }
 }
 
-impl TryFrom<String> for Request {
-    type Error = RequestParseError;
+impl FromStr for Request {
+    type Err = RequestParseError;
 
-    fn try_from(s: String) -> Result<Request, RequestParseError> {
+    fn from_str(s: &str) -> Result<Request, RequestParseError> {
         let s_iter = s.chars();
         let method: String = s_iter.take_while(|c| *c != ' ' && !is_newline(c)).collect();
         if method.is_empty() {
