@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 type HTTPHeaders = HashMap<String, String>;
 
@@ -22,7 +22,7 @@ struct Request {
     //data: &'a String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum RequestParseError {
     UnsupportedVersion(String),
     MissingVersion,
@@ -47,10 +47,10 @@ where
     iter.take_while(|x| !pred(x)).collect::<Vec<T>>()
 }
 
-impl TryFrom<String> for HTTPVersion {
-    type Error = RequestParseError;
+impl FromStr for HTTPVersion {
+    type Err = RequestParseError;
 
-    fn try_from(value: String) -> Result<Self, Self::Error> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         if value.is_empty() {
             return Err(RequestParseError::MissingVersion);
         }
