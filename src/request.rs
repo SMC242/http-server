@@ -3,6 +3,7 @@ use std::{collections::HashMap, str::FromStr};
 type HTTPHeaders = HashMap<String, String>;
 
 // TODO: add more methods
+#[derive(Debug, PartialEq, Eq)]
 enum HTTPMethod {
     Get,
 }
@@ -175,5 +176,14 @@ mod tests {
     #[test]
     fn http_version_parse_no_version() {
         HTTPVersion::from_str("HTTP/").expect_err("Parsing strings without versions should fail");
+    }
+
+    #[test]
+    fn http_request_parse_no_headers() {
+        let request = Request::from_str("GET / HTTP/1.1")
+            .expect("Parsing request with no headers should succeed");
+        assert_eq!(HTTPMethod::Get, request.method);
+        assert_eq!("/", request.path);
+        assert_eq!(HTTPVersion::V1_1, request.http_version);
     }
 }
