@@ -131,8 +131,7 @@ mod tests {
 
     #[test]
     fn test_http_version_parse_1_1() {
-        let result = convert::TryInto::try_into("HTTP/1.1".to_string())
-            .expect("Parsing HTTP/1.1 should succeed");
+        let result = HTTPVersion::from_str("HTTP/1.1").expect("Parsing HTTP/1.1 should succeed");
         assert_eq!(
             HTTPVersion::V1_1,
             result,
@@ -142,8 +141,7 @@ mod tests {
 
     #[test]
     fn test_http_version_parse_2_1() {
-        let result = convert::TryInto::try_into("HTTP/2.2".to_string())
-            .expect("Parsing HTTP/2.2 should succeed");
+        let result = HTTPVersion::from_str("HTTP/2.2").expect("Parsing HTTP/2.2 should succeed");
         assert_eq!(
             HTTPVersion::V2_2,
             result,
@@ -153,14 +151,12 @@ mod tests {
 
     #[test]
     fn test_http_version_parse_empty() {
-        convert::TryInto::<HTTPVersion>::try_into("".to_string())
-            .expect_err("Parsing empty strings should fail");
+        HTTPVersion::from_str("").expect_err("Parsing empty strings should fail");
     }
 
     #[test]
     fn test_http_version_parse_wrong_protocol() {
-        let err = convert::TryInto::<HTTPVersion>::try_into("TCP/3".to_string())
-            .expect_err("Parsing other protocols should fail");
+        let err = HTTPVersion::from_str("TCP/3").expect_err("Parsing other protocols should fail");
         assert!(
             matches!(err, RequestParseError::NotHTTP),
             "Parsing non-HTTP strings should fail"
@@ -169,8 +165,7 @@ mod tests {
 
     #[test]
     fn test_http_version_parse_bad_version() {
-        let err = convert::TryInto::<HTTPVersion>::try_into("HTTP/1.0".to_string())
-            .expect_err("Parsing bad versions should fail");
+        let err = HTTPVersion::from_str("HTTP/1.0").expect_err("Parsing bad versions should fail");
         assert!(
             matches!(err, RequestParseError::UnsupportedVersion(_)),
             "Parsing unsupported methods should fail"
@@ -179,7 +174,6 @@ mod tests {
 
     #[test]
     fn test_http_version_parse_no_version() {
-        convert::TryInto::<HTTPVersion>::try_into("HTTP/".to_string())
-            .expect_err("Parsing strings without versions should fail");
+        HTTPVersion::from_str("HTTP/").expect_err("Parsing strings without versions should fail");
     }
 }
