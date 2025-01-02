@@ -88,19 +88,18 @@ impl FromStr for Request {
     type Err = RequestParseError;
 
     fn from_str(s: &str) -> Result<Request, RequestParseError> {
-        let s_iter = s.chars();
-        let method: String = s_iter.take_while(|c| *c != ' ' && !is_newline(c)).collect();
+        let mut s_iter = s.chars();
+        let method =
+            String::from_iter(take_until(|c| *c != ' ' && !is_newline(c), s_iter.by_ref()));
         if method.is_empty() {
             return Err(RequestParseError::MissingMethod);
         }
         let parsed_method = HTTPMethod::from_str(method.as_str())?;
-        s_iter.next();
 
-        let path: String = s_iter.take_while(|c| *c != ' ' && !is_newline(c)).collect();
+        let path = String::from_iter(take_until(|c| *c != ' ' && !is_newline(c), s_iter.by_ref()));
         if path.is_empty() {
             return Err(RequestParseError::MissingPath);
         }
-        s_iter.next();
 
         let http_version_string: String = s_iter.take_while(|c| !is_newline(c)).collect();
         if http_version_string.is_empty() {
