@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Not};
+use std::collections::HashMap;
 
 type HTTPHeaders = HashMap<String, String>;
 
