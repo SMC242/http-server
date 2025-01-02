@@ -73,6 +73,17 @@ impl FromStr for HTTPVersion {
     }
 }
 
+impl FromStr for HTTPMethod {
+    type Err = RequestParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "GET" => Ok(HTTPMethod::Get),
+            method => Err(Self::Err::UnsupportedMethod(method.to_string())),
+        }
+    }
+}
+
 //impl TryFrom<String> for Request {
 //    type Error = RequestParseError;
 //
