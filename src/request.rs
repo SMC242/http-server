@@ -130,7 +130,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_http_version_parse_1_1() {
+    fn http_version_parse_1_1() {
         let result = HTTPVersion::from_str("HTTP/1.1").expect("Parsing HTTP/1.1 should succeed");
         assert_eq!(
             HTTPVersion::V1_1,
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn test_http_version_parse_2_1() {
+    fn http_version_parse_2_1() {
         let result = HTTPVersion::from_str("HTTP/2.2").expect("Parsing HTTP/2.2 should succeed");
         assert_eq!(
             HTTPVersion::V2_2,
@@ -150,12 +150,12 @@ mod tests {
     }
 
     #[test]
-    fn test_http_version_parse_empty() {
+    fn http_version_parse_empty() {
         HTTPVersion::from_str("").expect_err("Parsing empty strings should fail");
     }
 
     #[test]
-    fn test_http_version_parse_wrong_protocol() {
+    fn http_version_parse_wrong_protocol() {
         let err = HTTPVersion::from_str("TCP/3").expect_err("Parsing other protocols should fail");
         assert!(
             matches!(err, RequestParseError::NotHTTP),
@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn test_http_version_parse_bad_version() {
+    fn http_version_parse_bad_version() {
         let err = HTTPVersion::from_str("HTTP/1.0").expect_err("Parsing bad versions should fail");
         assert!(
             matches!(err, RequestParseError::UnsupportedVersion(_)),
@@ -173,7 +173,7 @@ mod tests {
     }
 
     #[test]
-    fn test_http_version_parse_no_version() {
+    fn http_version_parse_no_version() {
         HTTPVersion::from_str("HTTP/").expect_err("Parsing strings without versions should fail");
     }
 }
