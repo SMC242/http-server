@@ -24,6 +24,12 @@ struct Request {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+enum HeaderParseError {
+    MissingHeaderName,
+    MissingValue,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 enum RequestParseError {
     UnsupportedVersion(String),
     MissingVersion,
@@ -86,6 +92,25 @@ impl FromStr for HTTPMethod {
     }
 }
 
+fn err_if_empty<E>(err: E, s: String) -> Result<String, E> {
+    s.is_empty().then_some(s).ok_or(err)
+}
+
+fn parse_http1_1_headers(s: &str) -> Result<HTTPHeaders, HeaderParseError> {
+    let mut headers: HTTPHeaders = HashMap::new();
+    for line in s.lines() {
+        let mut line_chars = line.chars();
+        let header_name = err_if_empty(
+            HeaderParseError::MissingHeaderName,
+            take_until(|c| *c == ':', &mut line_chars),
+        )?;
+
+        let header_value = err_if_empty(HeaderParseError::MissingValue, line_chars.collect())?;
+        headers.insert(header_name, header_value);
+    }
+    Ok(headers)
+}
+
 impl FromStr for Request {
     type Err = RequestParseError;
 
@@ -102,7 +127,7 @@ impl FromStr for Request {
             return Err(RequestParseError::MissingPath);
         }
 
-        let http_version_string: String = s_iter.take_while(|c| !is_newline(c)).collect();
+        let http_version_string: String = s_iter.by_ref().take_while(|c| !is_newline(c)).collect();
         if http_version_string.is_empty() {
             return Err(RequestParseError::MissingVersion);
         }
@@ -112,22 +137,22 @@ impl FromStr for Request {
 
         let http_version = HTTPVersion::from_str(&http_version_string)?;
 
-        // TODO: parse headers
-        let headers = HashMap::new();
-
-        Ok(Request {
-            method: parsed_method,
-            path,
-            http_version,
-            headers,
-        })
+        // TODO: support upgrading to HTTP 2
+        // See https://serverfault.com/questions/1060286/what-is-the-request-line-for-http-2
+        match parse_http1_1_headers(s_iter.collect::<String>().as_str()) {
+            Ok(headers) => Ok(Request {
+                method: parsed_method,
+                path,
+                http_version,
+                headers,
+            }),
+            Err(_) => Err(RequestParseError::MalformedHeaders),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert;
-
     use super::*;
 
     #[test]
