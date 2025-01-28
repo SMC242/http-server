@@ -39,13 +39,14 @@ fn is_newline(c: &char) -> bool {
     matches!(c, '\r' | '\n')
 }
 
-fn take_until<F, T, Iter>(pred: F, iter: &mut Iter) -> Vec<T>
+fn take_until<F, T, Iter, Collection>(pred: F, iter: &mut Iter) -> Collection
 where
-    F: Fn(&T) -> bool,
     T: PartialEq,
+    F: Fn(&T) -> bool,
     Iter: Iterator<Item = T>,
+    Collection: std::iter::FromIterator<T>,
 {
-    iter.take_while(|x| !pred(x)).collect::<Vec<T>>()
+    iter.take_while(|x| !pred(x)).collect()
 }
 
 impl FromStr for HTTPVersion {
@@ -57,7 +58,7 @@ impl FromStr for HTTPVersion {
         }
 
         let mut iter = value.chars();
-        let protocol = String::from_iter(take_until(|x| *x == '/' || is_newline(x), iter.by_ref()));
+        let protocol: String = take_until(|x| *x == '/' || is_newline(x), iter.by_ref());
         if protocol.is_empty() {
             return Err(RequestParseError::MissingVersion);
         }
@@ -65,7 +66,7 @@ impl FromStr for HTTPVersion {
             return Err(RequestParseError::NotHTTP);
         }
 
-        match String::from_iter(take_until(is_newline, &mut iter)).as_str() {
+        match take_until::<_, _, _, String>(is_newline, &mut iter).as_str() {
             "" => Err(RequestParseError::MissingVersion),
             "1.1" => Ok(HTTPVersion::V1_1),
             "2.2" => Ok(HTTPVersion::V2_2),
@@ -90,14 +91,13 @@ impl FromStr for Request {
 
     fn from_str(s: &str) -> Result<Request, RequestParseError> {
         let mut s_iter = s.chars();
-        let method =
-            String::from_iter(take_until(|c| *c == ' ' && !is_newline(c), s_iter.by_ref()));
+        let method: String = take_until(|c| *c == ' ' && !is_newline(c), s_iter.by_ref());
         if method.is_empty() {
             return Err(RequestParseError::MissingMethod);
         }
         let parsed_method = HTTPMethod::from_str(method.as_str())?;
 
-        let path = String::from_iter(take_until(|c| *c == ' ' && !is_newline(c), s_iter.by_ref()));
+        let path: String = take_until(|c| *c == ' ' && !is_newline(c), s_iter.by_ref());
         if path.is_empty() {
             return Err(RequestParseError::MissingPath);
         }
