@@ -147,13 +147,13 @@ fn parse_http1_1_request_line(
 ) -> Result<HTTP1_1RequestLine, RequestParseError> {
     let method: String = err_if_empty(
         RequestParseError::MissingMethod,
-        take_until(|c| *c == ' ' && !is_newline(c), stream.by_ref()),
+        take_until(|c| *c == ' ' || is_newline(c), stream.by_ref()),
     )?;
     let parsed_method = HTTPMethod::from_str(method.as_str())?;
 
     let path: String = err_if_empty(
         RequestParseError::MissingPath,
-        take_until(|c| *c == ' ' && !is_newline(c), stream.by_ref()),
+        take_until(|c| *c == ' ' || is_newline(c), stream.by_ref()),
     )?;
 
     let http_version_string: String = err_if_empty(
