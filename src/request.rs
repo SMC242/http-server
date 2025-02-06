@@ -81,6 +81,31 @@ impl FromStr for HTTPVersion {
     }
 }
 
+/*
+* Check that an HTTP version string is valid. Supports HTTP 1.1
+*/
+fn validate_http_version(value: &str) -> Option<RequestParseError> {
+    if value.is_empty() {
+        return Some(RequestParseError::MissingVersion);
+    }
+
+    let mut iter = value.chars();
+    let protocol: String = take_until(|x| *x == '/' || is_newline(x), iter.by_ref());
+    if protocol.is_empty() {
+        return Some(RequestParseError::MissingVersion);
+    }
+    if protocol != "HTTP" {
+        return Some(RequestParseError::NotHTTP);
+    }
+
+    match take_until::<_, _, _, String>(is_newline, &mut iter).as_str() {
+        "" => Some(RequestParseError::MissingVersion),
+        "1.1" => None,
+        // E.G 0.9
+        version => Some(RequestParseError::UnsupportedVersion(version.to_string())),
+    }
+}
+
 impl FromStr for HTTPMethod {
     type Err = RequestParseError;
 
@@ -109,6 +134,43 @@ fn parse_http1_1_headers(s: &str) -> Result<HTTPHeaders, HeaderParseError> {
         headers.insert(header_name, header_value);
     }
     Ok(headers)
+}
+
+struct HTTP1_1RequestLine {
+    method: HTTPMethod,
+    path: String,
+}
+
+fn parse_http1_1_request_line(
+    stream: &mut impl Iterator<Item = char>,
+) -> Result<HTTP1_1RequestLine, RequestParseError> {
+    let method: String = err_if_empty(
+        RequestParseError::MissingMethod,
+        take_until(|c| *c == ' ' && !is_newline(c), stream.by_ref()),
+    )?;
+    let parsed_method = HTTPMethod::from_str(method.as_str())?;
+
+    let path: String = err_if_empty(
+        RequestParseError::MissingPath,
+        take_until(|c| *c == ' ' && !is_newline(c), stream.by_ref()),
+    )?;
+
+    let http_version_string: String = err_if_empty(
+        RequestParseError::MissingVersion,
+        stream.by_ref().take_while(|c| !is_newline(c)).collect(),
+    )?;
+    if http_version_string.contains(' ') {
+        return Err(RequestParseError::MalformedHeaders);
+    }
+
+    // Ensure valid HTTP version
+    match validate_http_version(http_version_string.as_str()) {
+        None => Ok(HTTP1_1RequestLine {
+            path,
+            method: parsed_method,
+        }),
+        Some(err) => Err(err),
+    }
 }
 
 impl FromStr for Request {
