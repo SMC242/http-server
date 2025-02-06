@@ -11,7 +11,7 @@ enum HTTPMethod {
 #[derive(PartialEq, PartialOrd, Debug)]
 enum HTTPVersion {
     V1_1,
-    V2_2,
+    V2,
 }
 
 struct Request {
@@ -75,7 +75,7 @@ impl FromStr for HTTPVersion {
         match take_until::<_, _, _, String>(is_newline, &mut iter).as_str() {
             "" => Err(RequestParseError::MissingVersion),
             "1.1" => Ok(HTTPVersion::V1_1),
-            "2.2" => Ok(HTTPVersion::V2_2),
+            "2.2" => Ok(HTTPVersion::V2),
             version => Err(RequestParseError::UnsupportedVersion(version.to_string())),
         }
     }
@@ -211,7 +211,7 @@ mod tests {
     fn http_version_parse_2_1() {
         let result = HTTPVersion::from_str("HTTP/2.2").expect("Parsing HTTP/2.2 should succeed");
         assert_eq!(
-            HTTPVersion::V2_2,
+            HTTPVersion::V2,
             result,
             "Expected HTTP V2, parsed {result:?}"
         );
