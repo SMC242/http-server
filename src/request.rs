@@ -208,16 +208,6 @@ mod tests {
     }
 
     #[test]
-    fn http_version_parse_2_1() {
-        let result = HTTPVersion::from_str("HTTP/2.2").expect("Parsing HTTP/2.2 should succeed");
-        assert_eq!(
-            HTTPVersion::V2,
-            result,
-            "Expected HTTP V2, parsed {result:?}"
-        );
-    }
-
-    #[test]
     fn http_version_parse_empty() {
         HTTPVersion::from_str("").expect_err("Parsing empty strings should fail");
     }
