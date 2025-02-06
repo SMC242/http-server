@@ -177,35 +177,15 @@ impl FromStr for Request {
     type Err = RequestParseError;
 
     fn from_str(s: &str) -> Result<Request, RequestParseError> {
-        let mut s_iter = s.chars();
-        let method: String = take_until(|c| *c == ' ' && !is_newline(c), s_iter.by_ref());
-        if method.is_empty() {
-            return Err(RequestParseError::MissingMethod);
-        }
-        let parsed_method = HTTPMethod::from_str(method.as_str())?;
-
-        let path: String = take_until(|c| *c == ' ' && !is_newline(c), s_iter.by_ref());
-        if path.is_empty() {
-            return Err(RequestParseError::MissingPath);
-        }
-
-        let http_version_string: String = s_iter.by_ref().take_while(|c| !is_newline(c)).collect();
-        if http_version_string.is_empty() {
-            return Err(RequestParseError::MissingVersion);
-        }
-        if http_version_string.contains(' ') {
-            return Err(RequestParseError::MalformedHeaders);
-        }
-
-        let http_version = HTTPVersion::from_str(&http_version_string)?;
-
+        let mut chars = s.chars();
+        let request_line = parse_http1_1_request_line(&mut chars)?;
         // TODO: support upgrading to HTTP 2
         // See https://serverfault.com/questions/1060286/what-is-the-request-line-for-http-2
-        match parse_http1_1_headers(s_iter.collect::<String>().as_str()) {
+        match parse_http1_1_headers(chars.collect::<String>().as_str()) {
             Ok(headers) => Ok(Request {
-                method: parsed_method,
-                path,
-                http_version,
+                method: request_line.method,
+                path: request_line.path,
+                http_version: HTTPVersion::V1_1,
                 headers,
             }),
             Err(_) => Err(RequestParseError::MalformedHeaders),
