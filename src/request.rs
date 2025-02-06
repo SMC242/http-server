@@ -118,7 +118,8 @@ impl FromStr for HTTPMethod {
 }
 
 fn err_if_empty<E>(err: E, s: String) -> Result<String, E> {
-    s.is_empty().then_some(s).ok_or(err)
+    println!("input was {s}");
+    (!s.is_empty()).then_some(s).ok_or(err)
 }
 
 fn parse_http1_1_headers(s: &str) -> Result<HTTPHeaders, HeaderParseError> {
