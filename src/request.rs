@@ -18,6 +18,7 @@ enum HTTPVersion {
 type Domain = String;
 type Port = u16;
 
+#[derive(Debug)]
 struct Request {
     method: HTTPMethod,
     path: String,
@@ -310,9 +311,18 @@ mod tests {
     }
 
     #[test]
+    fn http_request_parse_newlines() {
+        // Carriage returns are preferred by the HTTP standard but newlines are OK
+        let request = Request::from_str("GET / HTTP/1.1\nHost: cheese.com")
+            .expect("Parsing a request containing LFs should succeed");
+        assert_eq!(HTTPMethod::Get, request.method);
+        assert_eq!("/", request.path);
+        assert_eq!(HTTPVersion::V1_1, request.http_version);
+    }
+    #[test]
     fn http_request_parse_carriage_returns() {
         // Carriage returns are preferred by the HTTP standard
-        let request = Request::from_str(r"GET / HTTP/1.1\r\nHost: cheese.com")
+        let request = Request::from_str("GET / HTTP/1.1\r\nHost: cheese.com")
             .expect("Parsing a request containing carriage returns should succeed");
         assert_eq!(HTTPMethod::Get, request.method);
         assert_eq!("/", request.path);
@@ -321,10 +331,7 @@ mod tests {
 
     #[test]
     fn http_request_parse_mixed_newlines() {
-        let request = Request::from_str(r"GET / HTTP/1.1\r\nHost: cheese.com\n")
-            .expect("Parsing a request containing mixed LF and CRLF should succeed");
-        assert_eq!(HTTPMethod::Get, request.method);
-        assert_eq!("/", request.path);
-        assert_eq!(HTTPVersion::V1_1, request.http_version);
+        let request = Request::from_str("GET / HTTP/1.1\r\nHost: cheese.com\n")
+            .expect_err("Parsing a request containing mixed LF and CRLF should not succeed");
     }
 }
