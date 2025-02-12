@@ -228,12 +228,12 @@ impl FromStr for Request {
 
     fn from_str(s: &str) -> Result<Request, RequestParseError> {
         let mut chars = s.chars();
-        let request_line = parse_http1_1_request_line(&mut chars)?;
+        let request_line = parse_http1_1_request_line(&mut chars.by_ref())?;
 
-        let (host, port) = parse_host(&mut chars)?;
+        let (host, port) = parse_host(&mut chars.by_ref())?;
         // TODO: support upgrading to HTTP 2
         // See https://serverfault.com/questions/1060286/what-is-the-request-line-for-http-2
-        match parse_http1_1_headers(chars.collect::<String>().as_str()) {
+        match parse_http1_1_headers(chars.by_ref().collect::<String>().as_str()) {
             Ok(headers) => Ok(Request {
                 method: request_line.method,
                 path: request_line.path,
