@@ -1,3 +1,4 @@
+use fancy_regex::Regex;
 use std::{collections::HashMap, str::FromStr};
 
 type HTTPHeaders = HashMap<String, String>;
@@ -14,10 +15,15 @@ enum HTTPVersion {
     V2,
 }
 
+type Domain = String;
+type Port = u16;
+
 struct Request {
     method: HTTPMethod,
     path: String,
     http_version: HTTPVersion,
+    host: Domain,
+    port: Option<Port>,
     headers: HTTPHeaders,
     // TODO: store the POST data. Maybe have a variant?
     //data: &'a String,
@@ -39,6 +45,9 @@ enum RequestParseError {
     MissingPath,
     MalformedHeaders,
     MalformedVersion,
+    MissingHost,
+    InvalidHostDomain,
+    HostBadPort,
 }
 
 fn is_newline(c: &char) -> bool {
@@ -78,6 +87,46 @@ impl FromStr for HTTPVersion {
             "2.2" => Ok(HTTPVersion::V2),
             version => Err(RequestParseError::UnsupportedVersion(version.to_string())),
         }
+    }
+}
+
+fn parse_host(
+    stream: &mut impl Iterator<Item = char>,
+) -> Result<(Domain, Option<Port>), RequestParseError> {
+    if stream.take(5).collect::<String>() != "Host:" {
+        return Err(RequestParseError::MissingHost);
+    };
+
+    let host = err_if_empty(
+        RequestParseError::MissingHost,
+        take_until(is_newline, stream),
+    )?;
+
+    // Separate port from domain because IDNA doesn't validate ports
+    let (domain, port) = host
+        .split_once(':')
+        .map(|(left, right)| (left, Some(right)))
+        .unwrap_or((&host, None));
+
+    let port_num = port
+        .map(|p| u16::from_str(p).map_err(|_| RequestParseError::HostBadPort))
+        .transpose()?;
+
+    // Handle internationalised domains. See https://stackoverflow.com/a/26987741
+    // TODO: check for IPV6. See https://docs.rs/idna/1.0.3/idna/uts46/struct.AsciiDenyList.html
+    let ascii_domain =
+        idna::domain_to_ascii_cow(domain.trim().as_bytes(), idna::AsciiDenyList::URL)
+            .map_err(|_| RequestParseError::InvalidHostDomain)?;
+
+    // Regex from https://stackoverflow.com/a/26987741
+    // adapted to support ports
+    let domain_regex = Regex::new(
+        r"^(((?!-))(xn--|_)?[a-z0-9-]{0,61}[a-z0-9]{1,1}\.)*(xn--)?([a-z0-9][a-z0-9\-]{0,60}|[a-z0-9-]{1,30}\.[a-z]{2,})(?::(\d{1,5}))?$",
+    ).expect("The domain regex should compile");
+    // fancy-regex returns errors when the regex times out. This mitigates DDoS attacks
+    match Regex::is_match(&domain_regex, ascii_domain.trim()).unwrap_or(false) {
+        true => Ok((ascii_domain.to_string(), port_num)),
+        false => Err(RequestParseError::InvalidHostDomain),
     }
 }
 
@@ -180,12 +229,16 @@ impl FromStr for Request {
     fn from_str(s: &str) -> Result<Request, RequestParseError> {
         let mut chars = s.chars();
         let request_line = parse_http1_1_request_line(&mut chars)?;
+
+        let (host, port) = parse_host(&mut chars)?;
         // TODO: support upgrading to HTTP 2
         // See https://serverfault.com/questions/1060286/what-is-the-request-line-for-http-2
         match parse_http1_1_headers(chars.collect::<String>().as_str()) {
             Ok(headers) => Ok(Request {
                 method: request_line.method,
                 path: request_line.path,
+                host,
+                port,
                 http_version: HTTPVersion::V1_1,
                 headers,
             }),
@@ -237,9 +290,20 @@ mod tests {
     }
 
     #[test]
-    fn http_request_parse_no_headers() {
-        let request = Request::from_str("GET / HTTP/1.1")
-            .expect("Parsing request with no headers should succeed");
+    fn http_request_parse_no_headers_no_port() {
+        let content = "GET / HTTP/1.1\nHost: cheese.com";
+        let request = Request::from_str(content)
+            .expect("Parsing request with no headers and a host with no port should succeed");
+        assert_eq!(HTTPMethod::Get, request.method);
+        assert_eq!("/", request.path);
+        assert_eq!(HTTPVersion::V1_1, request.http_version);
+    }
+
+    #[test]
+    fn http_request_parse_no_headers_with_port() {
+        let content = "GET / HTTP/1.1\nHost: cheese.com:80";
+        let request = Request::from_str(content)
+            .expect("Parsing request with no headers and a host with no port should succeed");
         assert_eq!(HTTPMethod::Get, request.method);
         assert_eq!("/", request.path);
         assert_eq!(HTTPVersion::V1_1, request.http_version);
