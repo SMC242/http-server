@@ -86,6 +86,7 @@ fn parse_req(req: &str) -> Result<Request, RequestParseError> {
     Ok(Request {
         method,
         path,
+        version,
         headers,
         body,
     })

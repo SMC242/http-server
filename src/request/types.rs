@@ -28,6 +28,7 @@ pub type HTTPHeaders = HashMap<String, String>;
 pub struct Request {
     pub method: HTTPMethod,
     pub path: Path,
+    pub version: HTTPVersion;
     pub headers: HTTPHeaders,
     pub body: Option<String>,
 }
