@@ -38,6 +38,7 @@ pub enum RequestParseError {
     InvalidHeader(String),
     MissingHostHeader, // HTTP 1.1 requires the Host header to be set
     InvalidBody(String),
+    UnsupportedVersion(String),
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
@@ -94,7 +95,7 @@ impl FromStr for HTTPMethod {
 }
 
 impl FromStr for HTTPVersion {
-    type Err = ();
+    type Err = RequestParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -102,7 +103,7 @@ impl FromStr for HTTPVersion {
             "HTTP/1.0" => Ok(HTTPVersion::V1_0),
             "HTTP/1.1" => Ok(HTTPVersion::V1_1),
             // NOTE: HTTP 2 and 3 do not have start lines and therefore don't have a version string
-            _ => Err(()),
+            version => Err(RequestParseError::UnsupportedVersion(version.to_string())),
         }
     }
 }
@@ -119,6 +120,7 @@ impl std::fmt::Display for RequestParseError {
             Self::InvalidHeader(header_line) => {
                 format!("The following header was invalid: \"{header_line}\"")
             }
+            Self::UnsupportedVersion(version) => format!("Unsupported version \"{version}\""),
         };
         write!(f, "{prelude}\n=>{content}")
     }
