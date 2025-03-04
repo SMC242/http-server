@@ -78,6 +78,7 @@ fn parse_req(req: &str) -> Result<Request, RequestParseError> {
             .get("host")
             .ok_or(RequestParseError::MissingHostHeader)?;
     }
+    // TODO: validate host
 
     let body = match method {
         HTTPMethod::Post | HTTPMethod::Put | HTTPMethod::Patch => Some(lines.collect()),
