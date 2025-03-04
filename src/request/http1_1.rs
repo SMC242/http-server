@@ -15,8 +15,9 @@ fn parse_start_line(line: &str) -> Result<StartLine, RequestParseError> {
     let parse_path =
         |p| Path::from_str(p).or(Err(RequestParseError::InvalidStartLine("Invalid path")));
 
+    println!("Segments: {0:?}", segments);
     match segments.len() {
-        0 => Err(RequestParseError::InvalidStartLine("")),
+        0 => Err(RequestParseError::InvalidStartLine("Empty")),
         1 => Err(RequestParseError::InvalidStartLine("Too few segments")),
         // The HTTP/{version} segment was introduced in HTTP 1.0
         2 => Ok(StartLine {
@@ -90,4 +91,93 @@ fn parse_req(req: &str) -> Result<Request, RequestParseError> {
         headers,
         body,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn http_request_v0_9() {
+        let request = parse_req("GET /\n").expect("Parsing an HTTP/0.9 request should succeed");
+        assert_eq!(HTTPMethod::Get, request.method);
+        assert_eq!(Path::OriginForm("/".to_string()), request.path,);
+        assert_eq!(HTTPVersion::V0_9, request.version);
+    }
+
+    #[test]
+    fn http_request_v1_0() {
+        let request =
+            parse_req("GET / HTTP/1.0\n").expect("Parsing an HTTP/1.0 request should succeed");
+        assert_eq!(HTTPMethod::Get, request.method);
+        assert_eq!(Path::OriginForm("/".to_string()), request.path,);
+        assert_eq!(HTTPVersion::V1_0, request.version);
+    }
+
+    #[test]
+    fn http_request_with_host() {
+        let request = parse_req("GET / HTTP/1.1\nHost: example.com\n")
+            .expect("Parsing a request with an origin-form path should succeed");
+        assert_eq!(HTTPMethod::Get, request.method);
+        assert_eq!(
+            Path::OriginForm("/".to_string()),
+            request.path,
+            "Should be origin form, got {0:?}",
+            request.path
+        );
+        assert_eq!(HTTPVersion::V1_1, request.version);
+
+        let request2 = parse_req("CONNECT cheese.com:80 HTTP/1.1\nHost: example.com\n")
+            .expect("Parsing a CONNECT request with an authority-form path should succeed");
+        assert_eq!(HTTPMethod::Connect, request2.method);
+        assert_eq!(
+            Path::AuthorityForm("cheese.com".to_string(), 80),
+            request2.path,
+            "Should be authority form, got {0:?}",
+            request2.path
+        );
+        assert_eq!(HTTPVersion::V1_1, request2.version);
+
+        let request3 = parse_req("GET http://example.com HTTP/1.1\nHost: example.com\n")
+            .expect("Parsing a request with an absolute-form path should succeed");
+        assert_eq!(HTTPMethod::Get, request3.method);
+        assert_eq!(
+            Path::AbsoluteForm("http://example.com".to_string()),
+            request3.path,
+            "Should be absolute form, got {0:?}",
+            request3.path
+        );
+        assert_eq!(HTTPVersion::V1_1, request.version);
+
+        let request4 = parse_req("OPTIONS * HTTP/1.1\nHost: example.com\n")
+            .expect("Parsing an OPTIONS request with an asterisk path should succeed");
+        assert_eq!(HTTPMethod::Options, request4.method);
+        assert_eq!(
+            Path::Asterisk,
+            request4.path,
+            "Should be asterisk form, got {0:?}",
+            request4.path
+        );
+        assert_eq!(HTTPVersion::V1_1, request4.version);
+    }
+
+    #[test]
+    fn http_request_parse_newlines() {
+        // Carriage returns are preferred by the HTTP standard but newlines are OK
+        let request = parse_req("GET / HTTP/1.1\nHost: cheese.com\n")
+            .expect("Parsing a request containing LFs should succeed");
+        assert_eq!(HTTPMethod::Get, request.method);
+        assert_eq!(Path::OriginForm("/".to_string()), request.path);
+        assert_eq!(HTTPVersion::V1_1, request.version);
+    }
+
+    #[test]
+    fn http_request_parse_carriage_returns() {
+        // Carriage returns are preferred by the HTTP standard
+        let request = parse_req("GET / HTTP/1.1\r\nHost: cheese.com\n")
+            .expect("Parsing a request containing carriage returns should succeed");
+        assert_eq!(HTTPMethod::Get, request.method);
+        assert_eq!(Path::OriginForm("/".to_string()), request.path);
+        assert_eq!(HTTPVersion::V1_1, request.version);
+    }
 }
