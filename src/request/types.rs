@@ -61,9 +61,9 @@ impl FromStr for Path {
         else if path.starts_with("http://") {
             Ok(Path::AbsoluteForm(path.to_string()))
         } else if path.contains(':') {
-            // TODO: refactor this. It sucks!
-            match path.split(':').take(2).collect::<Vec<_>>()[0..1] {
-                [domain, port] => {
+            let mut parts = path.splitn(2, ':');
+            match (parts.next(), parts.next()) {
+                (Some(domain), Some(port)) => {
                     let parsed_port = u16::from_str(port).or(Err(()))?;
                     Ok(Path::AuthorityForm(domain.to_string(), parsed_port))
                 }
