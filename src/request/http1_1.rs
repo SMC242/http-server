@@ -60,17 +60,20 @@ fn parse_headers<'a, I: Iterator<Item = &'a str>>(
     Ok(headers)
 }
 
-pub fn parse_req_head(req: &mut Lines) -> Result<Request, RequestParseError> {
+pub fn parse_req_head<'a>(
+    req: &mut impl Iterator<Item = &'a str>,
+) -> Result<Request, RequestParseError> {
     let StartLine {
         method,
         path,
         version,
     } = req
         .next()
+        .as_deref()
         .map(parse_start_line)
         .ok_or(RequestParseError::InvalidStartLine("Missing start line"))??;
 
-    let mut header_req = req.by_ref().take_while(|line| !line.is_empty());
+    let mut header_req = req.take_while(|line| !line.is_empty());
     let headers: HTTPHeaders = parse_headers(&mut header_req)?;
 
     // HTTP/1.1 requires a Host header
