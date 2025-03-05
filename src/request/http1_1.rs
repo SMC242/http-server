@@ -60,7 +60,7 @@ fn parse_headers<'a, I: Iterator<Item = &'a str>>(
     Ok(headers)
 }
 
-pub fn parse_req(req: &mut Lines) -> Result<Request, RequestParseError> {
+pub fn parse_req_head(req: &mut Lines) -> Result<Request, RequestParseError> {
     let StartLine {
         method,
         path,
@@ -101,7 +101,7 @@ mod tests {
 
     #[test]
     fn http_request_v0_9() {
-        let request = parse_req(&mut "GET /\r\n".lines())
+        let request = parse_req_head(&mut "GET /\r\n".lines())
             .expect("Parsing an HTTP/0.9 request should succeed");
         assert_eq!(HTTPMethod::Get, request.method);
         assert_eq!(Path::OriginForm("/".to_string()), request.path,);
@@ -110,7 +110,7 @@ mod tests {
 
     #[test]
     fn http_request_v1_0() {
-        let request = parse_req(&mut "GET / HTTP/1.0\r\n".lines())
+        let request = parse_req_head(&mut "GET / HTTP/1.0\r\n".lines())
             .expect("Parsing an HTTP/1.0 request should succeed");
         assert_eq!(HTTPMethod::Get, request.method);
         assert_eq!(Path::OriginForm("/".to_string()), request.path,);
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn http_request_with_host() {
-        let request = parse_req(&mut "GET / HTTP/1.1\r\nHost: example.com\r\n".lines())
+        let request = parse_req_head(&mut "GET / HTTP/1.1\r\nHost: example.com\r\n".lines())
             .expect("Parsing a request with an origin-form path should succeed");
         assert_eq!(HTTPMethod::Get, request.method);
         assert_eq!(
@@ -131,7 +131,7 @@ mod tests {
         assert_eq!(HTTPVersion::V1_1, request.version);
 
         let request2 =
-            parse_req(&mut "CONNECT cheese.com:80 HTTP/1.1\r\nHost: example.com\r\n".lines())
+            parse_req_head(&mut "CONNECT cheese.com:80 HTTP/1.1\r\nHost: example.com\r\n".lines())
                 .expect("Parsing a CONNECT request with an authority-form path should succeed");
         assert_eq!(HTTPMethod::Connect, request2.method);
         assert_eq!(
@@ -143,7 +143,7 @@ mod tests {
         assert_eq!(HTTPVersion::V1_1, request2.version);
 
         let request3 =
-            parse_req(&mut "GET http://example.com HTTP/1.1\r\nHost: example.com\r\n".lines())
+            parse_req_head(&mut "GET http://example.com HTTP/1.1\r\nHost: example.com\r\n".lines())
                 .expect("Parsing a request with an absolute-form path should succeed");
         assert_eq!(HTTPMethod::Get, request3.method);
         assert_eq!(
@@ -154,7 +154,7 @@ mod tests {
         );
         assert_eq!(HTTPVersion::V1_1, request.version);
 
-        let request4 = parse_req(&mut "OPTIONS * HTTP/1.1\r\nHost: example.com\r\n".lines())
+        let request4 = parse_req_head(&mut "OPTIONS * HTTP/1.1\r\nHost: example.com\r\n".lines())
             .expect("Parsing an OPTIONS request with an asterisk path should succeed");
         assert_eq!(HTTPMethod::Options, request4.method);
         assert_eq!(
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn http_request_parse_newlines() {
         // Carriage returns are preferred by the HTTP standard but newlines are OK
-        let request = parse_req(&mut "GET / HTTP/1.1\nHost: cheese.com\n".lines())
+        let request = parse_req_head(&mut "GET / HTTP/1.1\nHost: cheese.com\n".lines())
             .expect("Parsing a request containing LFs should succeed");
         assert_eq!(HTTPMethod::Get, request.method);
         assert_eq!(Path::OriginForm("/".to_string()), request.path);
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn http_request_parse_carriage_returns() {
         // Carriage returns are preferred by the HTTP standard
-        let request = parse_req(&mut "GET / HTTP/1.1\r\r\nHost: cheese.com\r\n".lines())
+        let request = parse_req_head(&mut "GET / HTTP/1.1\r\r\nHost: cheese.com\r\n".lines())
             .expect("Parsing a request containing carriage returns should succeed");
         assert_eq!(HTTPMethod::Get, request.method);
         assert_eq!(Path::OriginForm("/".to_string()), request.path);

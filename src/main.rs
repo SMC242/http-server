@@ -46,7 +46,7 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     info!(target: "listener", "Parsing message from {client_ip} as HTTP request");
     // This iterator will be adavanced to the request body
     let req_lines = &mut request_content.lines();
-    let request = request::http1_1::parse_req(req_lines).map_err(|err| {
+    let request = request::http1_1::parse_req_head(req_lines).map_err(|err| {
         info!(target: "listener", "Failed to parse request from {client_ip} due to the following error: {err}");
         IoError::new(
             ErrorKind::InvalidData,
