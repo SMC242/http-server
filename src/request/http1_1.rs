@@ -60,7 +60,7 @@ fn parse_headers<'a, I: Iterator<Item = &'a str>>(
     Ok(headers)
 }
 
-pub fn parse_req_head(req: &mut Lines) -> Result<Request, RequestParseError> {
+pub fn parse_req_head(req: &mut Lines) -> Result<RequestHead, RequestParseError> {
     let StartLine {
         method,
         path,
@@ -81,18 +81,22 @@ pub fn parse_req_head(req: &mut Lines) -> Result<Request, RequestParseError> {
     }
     // TODO: validate host
 
-    let body = match method {
-        HTTPMethod::Post | HTTPMethod::Put | HTTPMethod::Patch => Some(req.collect()),
-        _ => None,
-    };
-
-    Ok(Request {
+    Ok(RequestHead {
         method,
         path,
         version,
         headers,
-        body,
     })
+}
+
+pub fn parse_req_body(req: &mut Lines) -> Result<RequestBody, RequestParseError> {
+    let body: String = req.collect();
+    // Interpreting bodies as text for now
+    if !body.is_empty() {
+        Ok(Some(body))
+    } else {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

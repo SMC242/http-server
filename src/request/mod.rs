@@ -5,7 +5,7 @@ pub mod http1_1;
 mod types;
 pub use types::*;
 
-impl FromStr for Request {
+impl FromStr for RequestHead {
     type Err = RequestParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

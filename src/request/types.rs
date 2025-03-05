@@ -25,12 +25,18 @@ pub enum HTTPMethod {
 pub type HTTPHeaders = HashMap<String, String>;
 
 #[derive(Debug)]
-pub struct Request {
+pub struct RequestHead {
     pub method: HTTPMethod,
     pub path: Path,
     pub version: HTTPVersion,
     pub headers: HTTPHeaders,
-    pub body: Option<String>,
+}
+
+pub type RequestBody = Option<String>;
+
+pub struct Request {
+    head: RequestHead,
+    body: RequestBody,
 }
 
 #[derive(Debug, PartialEq)]
