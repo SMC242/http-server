@@ -60,7 +60,9 @@ fn parse_headers<'a, I: Iterator<Item = &'a str>>(
     Ok(headers)
 }
 
-pub fn parse_req_head(req: &mut Lines) -> Result<RequestHead, RequestParseError> {
+pub fn parse_req_head<'a>(
+    req: &mut impl Iterator<Item = &'a str>,
+) -> Result<RequestHead, RequestParseError> {
     let StartLine {
         method,
         path,
