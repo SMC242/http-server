@@ -1,6 +1,5 @@
 use log::{error, info};
 use std::io::{ErrorKind, Read, Write};
-use std::net::Shutdown;
 use std::{
     net::{Ipv4Addr, TcpStream},
     time::Duration,
