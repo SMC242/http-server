@@ -26,27 +26,11 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     stream.set_read_timeout(TIMEOUT)?;
     stream.set_write_timeout(TIMEOUT)?;
 
-    let mut request_content = String::new();
-    // Read until end of request head (empty line).
-    // NOTE: further reading will be required to get the request body
-    let reader = stream.try_clone().map(BufReader::new)?;
-    // TODO: this doesn't work because lines() waits for EOF. I need to read_line in a loop :(
-    for line in reader.lines() {
-        let mut unwrapped = line?;
-        if unwrapped.is_empty() {
-            break;
-        } else {
-            let n_bytes = unwrapped.len();
-            info!(target: "listener", "Read {n_bytes} from {client_ip}");
-            unwrapped.push_str(CARRIAGE_RETURN);
-            request_content.push_str(unwrapped.as_str());
-        }
-    }
-
+    let reader = BufReader::new(stream.try_clone()?);
     info!(target: "listener", "Parsing message from {client_ip} as HTTP request");
     // This iterator will be adavanced to the request body
-    let req_lines = &mut request_content.lines();
-    let request = request::http1_1::parse_req_head(req_lines).map_err(|err| {
+    let request_content: Vec<String> = reader.lines().collect::<Result<Vec<String>, IoError>>()?;
+    let request = request::http1_1::parse_req_head(&mut request_content.iter().map(|s| s.as_str())).map_err(|err| {
         info!(target: "listener", "Failed to parse request from {client_ip} due to the following error: {err}");
         IoError::new(
             ErrorKind::InvalidData,
