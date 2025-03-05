@@ -57,7 +57,7 @@ fn parse_headers<'a, I: Iterator<Item = &'a str>>(
     Ok(headers)
 }
 
-fn parse_req(req: &str) -> Result<Request, RequestParseError> {
+pub fn parse_req(req: &str) -> Result<Request, RequestParseError> {
     let mut lines = req.lines();
 
     let StartLine {
