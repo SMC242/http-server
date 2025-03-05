@@ -1,5 +1,5 @@
 use log::{error, info};
-use std::io::{Error as IoError, ErrorKind, Read, Write};
+use std::io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write};
 use std::{
     net::{Ipv4Addr, TcpStream},
     time::Duration,
@@ -13,6 +13,7 @@ static IP: Ipv4Addr = Ipv4Addr::LOCALHOST;
 static PORT: u16 = 8080;
 static TIMEOUT: Option<Duration> = Some(Duration::new(10, 0));
 static DEFAULT_RESPONSE: &str = "HTTP/1.1 200 OK\r\n";
+static CARRIAGE_RETURN: &str = "\r\n";
 
 fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     let client_ip: String = stream
@@ -25,24 +26,35 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     stream.set_read_timeout(TIMEOUT)?;
     stream.set_write_timeout(TIMEOUT)?;
 
-    info!(target: "listener", "Reading request content from {client_ip}");
     let mut request_content = String::new();
-    match stream.read_to_string(&mut request_content) {
-        Ok(n_bytes) => info!(target: "listener", "Read {n_bytes} from {client_ip}"),
-        Err(err) => {
-            error!(target: "listener", "Failed to read message from {client_ip} due to {err:?}");
-            return Err(err);
+    // Read until end of request head (empty line).
+    // NOTE: further reading will be required to get the request body
+    let reader = stream.try_clone().map(BufReader::new)?;
+    // TODO: this doesn't work because lines() waits for EOF. I need to read_line in a loop :(
+    for line in reader.lines() {
+        let mut unwrapped = line?;
+        if unwrapped.is_empty() {
+            break;
+        } else {
+            let n_bytes = unwrapped.len();
+            info!(target: "listener", "Read {n_bytes} from {client_ip}");
+            unwrapped.push_str(CARRIAGE_RETURN);
+            request_content.push_str(unwrapped.as_str());
         }
-    };
+    }
 
     info!(target: "listener", "Parsing message from {client_ip} as HTTP request");
-    let request = request::http1_1::parse_req(request_content.as_str()).map_err(|err| {
+    // This iterator will be adavanced to the request body
+    let req_lines = &mut request_content.lines();
+    let request = request::http1_1::parse_req(req_lines).map_err(|err| {
         info!(target: "listener", "Failed to parse request from {client_ip} due to the following error: {err}");
         IoError::new(
             ErrorKind::InvalidData,
             "Could not parse message as HTTP request",
         )
     })?;
+
+    // TODO: read body if required
 
     info!(target: "listener", "Request received from {client_ip}: {request:?}");
     stream.write_all(DEFAULT_RESPONSE.as_bytes())
