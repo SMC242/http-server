@@ -1,5 +1,5 @@
 use log::{error, info};
-use std::io::{ErrorKind, Read, Write};
+use std::io::{Error as IoError, ErrorKind, Read, Write};
 use std::{
     net::{Ipv4Addr, TcpStream},
     time::Duration,
@@ -38,7 +38,7 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     info!(target: "listener", "Parsing message from {client_ip} as HTTP request");
     let request = request::http1_1::parse_req(request_content.as_str()).map_err(|err| {
         info!(target: "listener", "Failed to parse request from {client_ip} due to the following error: {err}");
-        std::io::Error::new(
+        IoError::new(
             ErrorKind::InvalidData,
             "Could not parse message as HTTP request",
         )
