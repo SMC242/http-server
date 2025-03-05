@@ -30,7 +30,8 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     // Read until end of request head (empty line).
     // NOTE: further reading will be required to get the request body
     let reader = stream.try_clone().map(BufReader::new)?;
-    // TODO: this doesn't work because lines() waits for EOF. I need to read_line in a loop :(
+    // This ultimately does 2 passes through the connection :( Would it be possible to cut out
+    // the first pass? The main reason for it is to unwrap each line
     for line in reader.lines() {
         let mut unwrapped = line?;
         if unwrapped.is_empty() {
