@@ -12,3 +12,12 @@ impl FromStr for RequestHead {
         todo!("Implement a parser that can handle any HTTP version using the version-specific modules");
     }
 }
+
+impl RequestHead {
+    pub fn should_read_body(&self) -> bool {
+        matches!(
+            self.method,
+            HTTPMethod::Put | HTTPMethod::Post | HTTPMethod::Patch
+        )
+    }
+}
