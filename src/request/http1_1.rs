@@ -55,7 +55,7 @@ fn parse_headers<'a, I: Iterator<Item = &'a str>>(
 
         // Headers must be case-insensitive
         headers.insert(
-            parts[0].to_lowercase().to_string(),
+            parts[0].to_lowercase().trim().to_string(),
             parts[1].trim().to_string(),
         );
     }
