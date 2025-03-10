@@ -44,7 +44,7 @@ pub enum RequestParseError {
     InvalidStartLine(&'static str),
     InvalidHeader(String),
     MissingHostHeader, // HTTP 1.1 requires the Host header to be set
-    InvalidBody(String),
+    BodyParseError(String),
     UnsupportedVersion(String),
 }
 
@@ -120,7 +120,7 @@ impl std::fmt::Display for RequestParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prelude = "Failed to parse request.";
         let content = match self {
-            Self::InvalidBody(body) => format!("Body is invalid: \"{body}\""),
+            Self::BodyParseError(reason) => format!("Could not parse body: {reason}"),
             Self::InvalidStartLine(reason) => format!("Start line is invalid: {reason}"),
             Self::MissingHostHeader => {
                 "The Host header must be passed in HTTP/1.1 requests".to_string()
