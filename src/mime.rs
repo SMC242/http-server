@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub struct MimeType {
@@ -196,5 +196,11 @@ impl FromStr for MimeType {
             sub_type,
             original: s.to_string(),
         })
+    }
+}
+
+impl Display for MimeType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{0{", self.original)
     }
 }
