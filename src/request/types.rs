@@ -44,7 +44,7 @@ pub enum RequestParseError {
     InvalidStartLine(&'static str),
     InvalidHeader(String),
     MissingHostHeader, // HTTP 1.1 requires the Host header to be set
-    BodyParseError(&'static str),
+    BodyParseError(String),
     UnsupportedVersion(String),
 }
 
