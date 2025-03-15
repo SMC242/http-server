@@ -15,6 +15,7 @@ pub enum MainMimeType {
     Image,
     Text,
     Video,
+    Multipart,
 }
 
 #[derive(Debug, PartialEq)]
@@ -92,12 +93,14 @@ pub enum SubMimeType {
     _3GP,
     _3G2,
     _7Z,
+    FormData,
 }
 
 impl FromStr for MimeType {
     type Err = &'static str;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // This function is based on the table from https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types/Common_types
         let (main_type, sub_type) = match s {
             "audio/aac" => (MainMimeType::Audio, SubMimeType::AAC),
             "application/x-abiword" => (MainMimeType::Application, SubMimeType::ABW),
@@ -188,6 +191,7 @@ impl FromStr for MimeType {
             "video/3gpp" | "audio/3gpp" => (MainMimeType::Video, SubMimeType::_3GP),
             "video/3gpp2" | "audio/3gpp2" => (MainMimeType::Video, SubMimeType::_3G2),
             "application/x-7z-compressed" => (MainMimeType::Application, SubMimeType::_7Z),
+            "multipart/form-data" => (MainMimeType::Multipart, SubMimeType::FormData),
             _ => return Err("Not a valid MIME type"),
         };
 
