@@ -1,6 +1,8 @@
 use std::str::FromStr;
 
 // Re-exports
+mod headers;
+pub use headers::*;
 pub mod http1_1;
 mod types;
 pub use types::*;
