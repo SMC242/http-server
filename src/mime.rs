@@ -2,9 +2,9 @@ use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub struct MimeType {
-    main_type: MainMimeType,
-    sub_type: SubMimeType,
-    original: String,
+    pub main_type: MainMimeType,
+    pub sub_type: SubMimeType,
+    pub original: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -15,6 +15,7 @@ pub enum MainMimeType {
     Image,
     Text,
     Video,
+    Message,
     Multipart,
 }
 
@@ -101,6 +102,8 @@ impl FromStr for MimeType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // This function is based on the table from https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types/Common_types
+        // It is incomplete. See https://www.iana.org/assignments/media-types/media-types.xhtml for
+        // the full list. TODO: support all MIME types
         let (main_type, sub_type) = match s {
             "audio/aac" => (MainMimeType::Audio, SubMimeType::AAC),
             "application/x-abiword" => (MainMimeType::Application, SubMimeType::ABW),
