@@ -68,9 +68,21 @@ pub fn parse_content_type(content_type: &String) -> Result<ContentTypeInfo, Requ
                     + " must be followed by either charset=... or boundaryString=...",
             ))
         }
+        "boundaryString" => {
+            if !matches!(mime_type.main_type, MainMimeType::Multipart) {
+                return Err(RequestParseError::BodyParseError(format!(
+                    "boundaryString is required for multipart/* MIME types. MIME type: {0}",
+                    mime_type.original
+                )));
             }
-            "charset" => (None, Some(chars.collect())),
-        other_param => return Err(RequestParseError::InvalidHeader(format!("Unexpected parameter: '{other_param}'")))
+            (Some(chars.collect()), None)
+        }
+        "charset" => (None, Some(chars.collect())),
+        other_param => {
+            return Err(RequestParseError::InvalidHeader(format!(
+                "Unexpected parameter: '{other_param}'"
+            )))
+        }
     };
 
     Ok(ContentTypeInfo {
