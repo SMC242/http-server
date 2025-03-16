@@ -10,9 +10,9 @@ pub fn decode_body(encoding: &[ContentEncoding], body: Vec<u8>) -> Result<String
     String::from_utf8(body).or(Err("Failed to decode bytes as UTF-8"))
 }
 
-fn read_body(length: u64, body: &str) -> Result<Vec<u8>, String> {
+fn read_body(length: u64, body: impl Iterator<Item = u8>) -> Result<Vec<u8>, String> {
     let expected_length = length.try_into().expect("The server should be 64-bit");
-    let bytes: Vec<u8> = body.bytes().take(expected_length).collect();
+    let bytes: Vec<u8> = body.take(expected_length).collect();
 
     let actual_length = bytes.len();
     if actual_length != expected_length {
@@ -22,7 +22,10 @@ fn read_body(length: u64, body: &str) -> Result<Vec<u8>, String> {
     }
 }
 
-pub fn parse_body_text(parse_info: &MimeParseInfo, body: &str) -> Result<String, String> {
+pub fn parse_body_text(
+    parse_info: &MimeParseInfo,
+    body: impl Iterator<Item = u8>,
+) -> Result<String, String> {
     if !matches!(
         parse_info.content_type,
         MimeType {
@@ -37,7 +40,10 @@ pub fn parse_body_text(parse_info: &MimeParseInfo, body: &str) -> Result<String,
     decode_body(&parse_info.encoding, bytes).map_err(|e| e.to_string())
 }
 
-pub fn parse_body_json(parse_info: &MimeParseInfo, body: &str) -> Result<Json, String> {
+pub fn parse_body_json(
+    parse_info: &MimeParseInfo,
+    body: impl Iterator<Item = u8>,
+) -> Result<Json, String> {
     if !matches!(
         parse_info.content_type,
         MimeType {
@@ -79,7 +85,7 @@ mod tests {
 
         let body = r#"{"foo":"bar"}"#;
 
-        parse_body_json(&mime_info, body).expect("Parsing the body should succeed");
+        parse_body_json(&mime_info, body.bytes()).expect("Parsing the body should succeed");
     }
 
     #[test]
@@ -101,7 +107,8 @@ mod tests {
   "baz": "qux"
 }"#;
 
-        parse_body_json(&mime_info, body).expect("Parsing a multiline JSON body should succeed");
+        parse_body_json(&mime_info, body.bytes())
+            .expect("Parsing a multiline JSON body should succeed");
     }
 
     #[test]
@@ -120,7 +127,7 @@ mod tests {
 
         let body = r#"{"foo":"bar"}"#;
 
-        parse_body_json(&mime_info, body)
+        parse_body_json(&mime_info, body.bytes())
             .expect_err("An error should be thrown when the Content-Length is wrong");
     }
 
@@ -138,7 +145,7 @@ mod tests {
             encoding: vec![],
         };
 
-        parse_body_json(&incorrect_mime_info, "lol")
+        parse_body_json(&incorrect_mime_info, "lol".bytes())
             .expect_err("Calling parse_body_json when the MIME type is not JSON should fail");
 
         let correct_mime_info = MimeParseInfo {
@@ -153,7 +160,7 @@ mod tests {
             encoding: vec![],
         };
 
-        parse_body_json(&correct_mime_info, r#"not a json"#)
+        parse_body_json(&correct_mime_info, r#"not a json"#.bytes())
             .expect_err("Parsing a body that is not JSON as JSON should fail");
     }
 
@@ -171,7 +178,8 @@ mod tests {
             encoding: vec![],
         };
 
-        parse_body_json(&mime_info, r#""#).expect_err("Parsing an empty body as JSON should fail");
+        parse_body_json(&mime_info, r#""#.bytes())
+            .expect_err("Parsing an empty body as JSON should fail");
     }
 
     #[test]
@@ -189,7 +197,7 @@ mod tests {
         };
         let body = r#"<!doctype html><title>a</title>"#;
 
-        let result = parse_body_text(&mime_info, body)
+        let result = parse_body_text(&mime_info, body.bytes())
             .expect("Parsing a basic HTML document should succeed");
         assert_eq!(result, "<!doctype html><title>a</title>".to_string());
     }
@@ -209,7 +217,7 @@ mod tests {
         };
         let body = r#""#;
 
-        let result = parse_body_text(&mime_info, body)
+        let result = parse_body_text(&mime_info, body.bytes())
             .expect("Parsing an empty HTML document should succeed");
         assert_eq!(result, "".to_string());
     }
@@ -229,7 +237,8 @@ mod tests {
         };
         let body = r#"IDK what an MP3 file looks like"#;
 
-        parse_body_text(&mime_info, body).expect_err("Parsing a non-text document should fail");
+        parse_body_text(&mime_info, body.bytes())
+            .expect_err("Parsing a non-text document should fail");
     }
     // TODO: add tests for encodings, charsets, and boundaries
 }

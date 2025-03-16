@@ -34,10 +34,9 @@ pub struct RequestHead {
 
 pub type RequestBody = Option<String>;
 
-pub struct Request {
-    head: RequestHead,
-    body: RequestBody,
+pub struct Request<I: Iterator<Item = u8>> {
     pub head: RequestHead,
+    body: I,
 }
 
 #[derive(Debug, PartialEq)]
