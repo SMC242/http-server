@@ -12,7 +12,7 @@ pub fn decode_body(encoding: Vec<ContentEncoding>, body: Vec<u8>) -> Result<Stri
     String::from_utf8(body).or(Err("Failed to decode bytes as UTF-8"))
 }
 
-pub fn parse_body_json(parse_info: MimeParseInfo, body: &String) -> Result<Json, String> {
+pub fn parse_body_json(parse_info: MimeParseInfo, body: &str) -> Result<Json, String> {
     if !matches!(
         parse_info.content_type,
         MimeType {

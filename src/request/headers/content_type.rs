@@ -55,7 +55,7 @@ pub fn parse_content_encoding(s: &str) -> Result<Vec<ContentEncoding>, RequestPa
         .collect()
 }
 
-fn parse_content_type(content_type: &String) -> Result<ContentTypeInfo, RequestParseError> {
+fn parse_content_type(content_type: &str) -> Result<ContentTypeInfo, RequestParseError> {
     let mut chars = content_type.chars().peekable();
     let media_type: String = chars.by_ref().take_while(|c| ';' != *c).collect();
     let mime_type = MimeType::from_str(media_type.as_str()).map_err(|_| {
