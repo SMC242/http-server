@@ -208,6 +208,6 @@ impl FromStr for MimeType {
 
 impl Display for MimeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{0{", self.original)
+        write!(f, "{0}", self.original)
     }
 }
