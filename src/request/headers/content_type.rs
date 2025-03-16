@@ -12,7 +12,7 @@ pub enum ContentEncoding {
 }
 
 #[derive(Debug)]
-struct MimeParseInfo {
+pub struct MimeParseInfo {
     pub length: u64,
     pub boundary: Option<String>,
     pub content_type: MimeType,
