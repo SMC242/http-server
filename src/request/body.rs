@@ -173,5 +173,63 @@ mod tests {
 
         parse_body_json(&mime_info, r#""#).expect_err("Parsing an empty body as JSON should fail");
     }
+
+    #[test]
+    fn parse_html() {
+        let mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Text,
+                sub_type: SubMimeType::HTM,
+                original: "text/html".to_string(),
+            },
+            length: 31u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+        let body = r#"<!doctype html><title>a</title>"#;
+
+        let result = parse_body_text(&mime_info, body)
+            .expect("Parsing a basic HTML document should succeed");
+        assert_eq!(result, "<!doctype html><title>a</title>".to_string());
+    }
+
+    #[test]
+    fn parse_empty_text() {
+        let mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Text,
+                sub_type: SubMimeType::HTM,
+                original: "text/html".to_string(),
+            },
+            length: 0u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+        let body = r#""#;
+
+        let result = parse_body_text(&mime_info, body)
+            .expect("Parsing an empty HTML document should succeed");
+        assert_eq!(result, "".to_string());
+    }
+
+    #[test]
+    fn parse_nontext() {
+        let mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Audio,
+                sub_type: SubMimeType::MP3,
+                original: "audio/mp3".to_string(),
+            },
+            length: 31u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+        let body = r#"IDK what an MP3 file looks like"#;
+
+        parse_body_text(&mime_info, body).expect_err("Parsing a non-text document should fail");
+    }
     // TODO: add tests for encodings, charsets, and boundaries
 }
