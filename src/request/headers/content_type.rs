@@ -17,7 +17,7 @@ pub struct MimeParseInfo {
     pub boundary: Option<String>,
     pub content_type: MimeType,
     pub charset: Option<String>, // TODO: Handle decoding downstream with encoding_rs
-    pub encoding: Option<Vec<ContentEncoding>>,
+    pub encoding: Vec<ContentEncoding>,
 }
 
 struct ContentTypeInfo {
@@ -118,8 +118,7 @@ pub fn parse_mime_info(headers: HTTPHeaders) -> Result<MimeParseInfo, RequestPar
 
     let encoding = headers
         .get("content-encoding")
-        .map(|enc| parse_content_encoding(enc))
-        .transpose()?;
+        .map_or(Ok(vec![]), |enc| parse_content_encoding(enc))?;
     let content_type = headers
         .get("content-type")
         .ok_or(RequestParseError::BodyParseError(
@@ -238,6 +237,7 @@ mod tests {
         let MimeParseInfo {
             content_type,
             length,
+            encoding,
             ..
         } = parse_mime_info(new_http_headers(&[
             ("content-type", "audio/ogg"),
@@ -254,6 +254,11 @@ mod tests {
             "Should be audio/ogg"
         );
         assert_eq!(length, 1024u64, "Should be 1024");
+        assert_eq!(
+            encoding,
+            vec![],
+            "The encodings should be set to the empty vector by default"
+        )
     }
 
     #[test]
@@ -344,7 +349,7 @@ mod tests {
             "Should be video/mp4"
         );
         assert_eq!(length, 1024u64);
-        assert_eq!(encoding, Some(vec![ContentEncoding::Compress]));
+        assert_eq!(encoding, vec![ContentEncoding::Compress]);
     }
 
     #[test]
@@ -374,11 +379,11 @@ mod tests {
         assert_eq!(length, 1024u64);
         assert_eq!(
             encoding,
-            Some(vec![
+            vec![
                 ContentEncoding::Compress,
                 ContentEncoding::Deflate,
                 ContentEncoding::Gzip
-            ])
+            ]
         );
     }
 }
