@@ -62,13 +62,12 @@ pub fn parse_content_type(content_type: &String) -> Result<ContentTypeInfo, Requ
     let param_name: String = chars.by_ref().take_while(|c| '=' != *c).collect();
     // `boundaryString` and `charset` are mutually exclusive
     let (boundary, charset): (Option<String>, Option<String>) = match param_name.as_str() {
-            "" => return Err(RequestParseError::InvalidHeader("Unexpected ';' in Content-Type header. ';' must be followed by either charset=... or boundaryString=...".to_string())),
-            "boundarystring" => {
-                if !matches!(mime_type.main_type, MainMimeType::Multipart) {return Err(RequestParseError::BodyParseError(format!(
-                "boundaryString is required for multipart/* MIME types. MIME type: {0}",
-                mime_type.original
-            )));}
-                (Some(chars.collect()), None)
+        "" => {
+            return Err(RequestParseError::InvalidHeader(
+                "Unexpected ';' in Content-Type header. ';'".to_string()
+                    + " must be followed by either charset=... or boundaryString=...",
+            ))
+        }
             }
             "charset" => (None, Some(chars.collect())),
         other_param => return Err(RequestParseError::InvalidHeader(format!("Unexpected parameter: '{other_param}'")))
