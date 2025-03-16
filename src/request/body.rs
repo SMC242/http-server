@@ -157,5 +157,21 @@ mod tests {
             .expect_err("Parsing a body that is not JSON as JSON should fail");
     }
 
+    #[test]
+    fn parse_empty_json() {
+        let mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Application,
+                sub_type: SubMimeType::JSON,
+                original: "application/json".to_string(),
+            },
+            length: 0u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+
+        parse_body_json(&mime_info, r#""#).expect_err("Parsing an empty body as JSON should fail");
+    }
     // TODO: add tests for encodings, charsets, and boundaries
 }
