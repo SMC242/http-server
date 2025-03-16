@@ -22,6 +22,21 @@ fn read_body(length: u64, body: &str) -> Result<Vec<u8>, String> {
     }
 }
 
+pub fn parse_body_text(parse_info: &MimeParseInfo, body: &str) -> Result<String, String> {
+    if !matches!(
+        parse_info.content_type,
+        MimeType {
+            main_type: MainMimeType::Text,
+            ..
+        },
+    ) {
+        return Err("Not a text document".to_string());
+    }
+
+    let bytes = read_body(parse_info.length, body)?;
+    decode_body(&parse_info.encoding, bytes).map_err(|e| e.to_string())
+}
+
 pub fn parse_body_json(parse_info: &MimeParseInfo, body: &str) -> Result<Json, String> {
     if !matches!(
         parse_info.content_type,
@@ -41,6 +56,8 @@ pub fn parse_body_json(parse_info: &MimeParseInfo, body: &str) -> Result<Json, S
     serde_json::from_str::<Json>(content.as_str())
         .map_err(|reason| format!("Failed to decode JSON because: '{reason}'"))
 }
+
+// TODO: multipart parser
 
 #[cfg(test)]
 mod tests {
