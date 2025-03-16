@@ -51,6 +51,14 @@ pub fn parse_content_type(content_type: &String) -> Result<ContentTypeInfo, Requ
     })?;
 
     // Parse parameters if they exist
+    if chars.peek().is_none() {
+        return Ok(ContentTypeInfo {
+            content_type: mime_type,
+            charset: None,
+            boundary: None,
+        });
+    }
+
     let param_name: String = chars.by_ref().take_while(|c| '=' != *c).collect();
     // `boundaryString` and `charset` are mutually exclusive
     let (boundary, charset): (Option<String>, Option<String>) = match param_name.as_str() {
