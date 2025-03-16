@@ -5,12 +5,12 @@ use super::{content_type::ContentEncoding, headers::content_type::MimeParseInfo}
 /// An arbitrary JSON
 pub type Json = serde_json::Value;
 
-pub fn decode_body(encoding: Vec<ContentEncoding>, body: Vec<u8>) -> Result<String, &'static str> {
+pub fn decode_body(encoding: &[ContentEncoding], body: Vec<u8>) -> Result<String, &'static str> {
     // TODO: Use flate2 and rust-brotli to decode the body
     String::from_utf8(body).or(Err("Failed to decode bytes as UTF-8"))
 }
 
-pub fn parse_body_json(parse_info: MimeParseInfo, body: &str) -> Result<Json, String> {
+pub fn parse_body_json(parse_info: &MimeParseInfo, body: &str) -> Result<Json, String> {
     if !matches!(
         parse_info.content_type,
         MimeType {
@@ -28,7 +28,7 @@ pub fn parse_body_json(parse_info: MimeParseInfo, body: &str) -> Result<Json, St
         .try_into()
         .expect("The server should be 64-bit");
     let content_bytes: Vec<u8> = body.bytes().take(expected_length).collect();
-    let content: String = decode_body(parse_info.encoding, content_bytes)?;
+    let content: String = decode_body(&parse_info.encoding, content_bytes)?;
 
     let actual_length = content.len();
     if actual_length != expected_length {
