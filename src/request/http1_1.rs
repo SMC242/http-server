@@ -188,7 +188,7 @@ mod tests {
     #[test]
     fn http_request_parse_carriage_returns() {
         // Carriage returns are preferred by the HTTP standard
-        let request = parse_req_head(&mut "GET / HTTP/1.1\r\r\nHost: cheese.com\r\n".lines())
+        let request = parse_req_head(&mut "GET / HTTP/1.1\r\nHost: cheese.com\r\n".lines())
             .expect("Parsing a request containing carriage returns should succeed");
         assert_eq!(HTTPMethod::Get, request.method);
         assert_eq!(Path::OriginForm("/".to_string()), request.path);
