@@ -128,3 +128,210 @@ pub fn parse_mime_info(headers: HTTPHeaders) -> Result<MimeParseInfo, RequestPar
         encoding,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn new_http_headers(pairs: &[(&str, &str)]) -> HTTPHeaders {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    use crate::{
+        mime::SubMimeType,
+        request::{content_type::parse_mime_info, HTTPHeaders},
+    };
+
+    #[test]
+    fn empty_headers() {
+        let headers: HTTPHeaders = new_http_headers(&[]);
+        parse_mime_info(headers)
+            .expect_err("Attempting to parse the MIME info from empty headers should fail");
+    }
+
+    #[test]
+    fn missing_headers() {
+        parse_mime_info(new_http_headers(&[("content-type", "application/json")]))
+            .expect_err("Parsing MIME info without a Content-Length should fail");
+        parse_mime_info(new_http_headers(&[("content-length", "0")]))
+            .expect_err("Parsing MIME info without a Content-Type should fail");
+    }
+
+    #[test]
+    fn invalid_content_type() {
+        parse_mime_info(new_http_headers(&[
+            ("content-type", ""),
+            ("content-length", "0"),
+        ]))
+        .expect_err("Parsing MIME info with an empty Content-Type should fail");
+        parse_mime_info(new_http_headers(&[
+            ("content-type", "application/fakesubtype"),
+            ("content-length", "0"),
+        ]))
+        .expect_err("Parsing MIME info with a fake main MIME type should fail");
+        parse_mime_info(new_http_headers(&[
+            ("content-type", "fakemaintype/html"),
+            ("content-length", "0"),
+        ]))
+        .expect_err("Parsing MIME info with a fake MIME subtype should fail");
+    }
+
+    #[test]
+    fn invalid_content_length() {
+        parse_mime_info(new_http_headers(&[
+            ("content-type", "text/html"),
+            ("content-length", "-1"),
+        ]))
+        .expect_err("Parsing negative Content-Lengths should fail");
+
+        parse_mime_info(new_http_headers(&[
+            ("content-type", "text/html"),
+            ("content-length", "afkajaffjej"),
+        ]))
+        .expect_err("Parsing string Content-Lengths should fail");
+
+        parse_mime_info(new_http_headers(&[
+            ("content-type", "text/html"),
+            ("content-length", "6.0"),
+        ]))
+        .expect_err("Parsing string decimal Content-Lengths should fail");
+    }
+
+    #[test]
+    fn varying_content_lengths() {
+        parse_mime_info(new_http_headers(&[
+            ("content-type", "text/html"),
+            ("content-length", "1"),
+        ]))
+        .expect("Parsing Content-Length = 1 should succeed");
+
+        parse_mime_info(new_http_headers(&[
+            ("content-type", "text/html"),
+            ("content-length", "128"),
+        ]))
+        .expect("Parsing Content-Length = 128 should succeed");
+
+        parse_mime_info(new_http_headers(&[
+            ("content-type", "text/html"),
+            ("content-length", "4000000000"),
+        ]))
+        .expect("Parsing Content-Length = 4 billion should succeed");
+    }
+
+    #[test]
+    fn normal_content_type_and_length() {
+        let MimeParseInfo {
+            content_type,
+            length,
+            ..
+        } = parse_mime_info(new_http_headers(&[
+            ("content-type", "audio/ogg"),
+            ("content-length", "1024"),
+        ]))
+        .expect("Parsing Content-Type = audio/ogg, Content-Length = 1024 should succeed");
+        assert_eq!(
+            content_type,
+            MimeType {
+                main_type: MainMimeType::Audio,
+                sub_type: SubMimeType::OGA,
+                original: "audio/ogg".to_string()
+            },
+            "Should be audio/ogg"
+        );
+        assert_eq!(length, 1024u64, "Should be 1024");
+    }
+
+    #[test]
+    fn with_boundary() {
+        let MimeParseInfo {
+            content_type,
+            length,
+            boundary,
+            charset,
+            ..
+        } = parse_mime_info(new_http_headers(&[
+            ("content-type", "multipart/form-data;boundaryString=---------------------------1003363413119651595289485765"),
+            ("content-length", "1024"),
+        ]))
+        .expect("Parsing Content-Type = multipart/form-data, Content-Length = 1024, with boundaryString should succeed");
+        assert_eq!(
+            content_type,
+            MimeType {
+                main_type: MainMimeType::Multipart,
+                sub_type: SubMimeType::FormData,
+                original: "multipart/form-data".to_string()
+            },
+            "Should be multipart/form-data"
+        );
+        assert_eq!(length, 1024u64);
+        assert_eq!(
+            boundary,
+            Some("---------------------------1003363413119651595289485765".to_string())
+        );
+        assert!(
+            charset.is_none(),
+            "charset and boundaryString are mutually exclusive"
+        );
+    }
+
+    #[test]
+    fn with_charset() {
+        let MimeParseInfo {
+            content_type,
+            length,
+            charset,
+            boundary,
+            ..
+        } = parse_mime_info(new_http_headers(&[
+            ("content-type", "text/html;charset=utf-8"),
+            ("content-length", "1024"),
+        ]))
+        .expect(
+            "Parsing Content-Type = text/html Content-Length = 1024, with charset should succeed",
+        );
+        assert_eq!(
+            content_type,
+            MimeType {
+                main_type: MainMimeType::Text,
+                sub_type: SubMimeType::HTM,
+                original: "text/html".to_string()
+            },
+            "Should be text/html"
+        );
+        assert_eq!(length, 1024u64);
+        assert_eq!(charset, Some("utf-8".to_string()));
+        assert!(
+            boundary.is_none(),
+            "charset and boundaryString are mutually exclusive"
+        );
+    }
+
+    #[test]
+    fn with_encoding() {
+        let MimeParseInfo {
+            content_type,
+            length,
+            encoding,
+            ..
+        } = parse_mime_info(new_http_headers(&[
+            ("content-type", "video/mp4"),
+            ("content-length", "1024"),
+            ("content-encoding", "compress")
+        ]))
+        .expect("Parsing Content-Type = video/mp4, Content-Length = 1024, Content-Encoding = compress should succeed");
+        assert_eq!(
+            content_type,
+            MimeType {
+                main_type: MainMimeType::Video,
+                sub_type: SubMimeType::MP4,
+                original: "video/mp4".to_string()
+            },
+            "Should be video/mp4"
+        );
+        assert_eq!(length, 1024u64);
+        assert_eq!(encoding, Some(ContentEncoding::Compress));
+    }
+}
