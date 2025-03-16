@@ -1,5 +1,3 @@
-use std::str::Bytes;
-
 use crate::mime::{MainMimeType, MimeType, SubMimeType};
 
 use super::{content_type::ContentEncoding, headers::content_type::MimeParseInfo};
