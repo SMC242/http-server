@@ -104,5 +104,38 @@ mod tests {
             .expect_err("An error should be thrown when the Content-Length is wrong");
     }
 
+    #[test]
+    fn parse_json_not_json() {
+        let incorrect_mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Font,
+                sub_type: SubMimeType::TTF,
+                original: "font/ttf".to_string(),
+            },
+            length: 3u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+
+        parse_body_json(&incorrect_mime_info, "lol")
+            .expect_err("Calling parse_body_json when the MIME type is not JSON should fail");
+
+        let correct_mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Application,
+                sub_type: SubMimeType::JSON,
+                original: "application/json".to_string(),
+            },
+            length: 10u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+
+        parse_body_json(&correct_mime_info, r#"not a json"#)
+            .expect_err("Parsing a body that is not JSON as JSON should fail");
+    }
+
     // TODO: add tests for encodings, charsets, and boundaries
 }
