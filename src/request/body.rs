@@ -38,3 +38,71 @@ pub fn parse_body_json(parse_info: &MimeParseInfo, body: &str) -> Result<Json, S
     serde_json::from_str::<Json>(content.as_str())
         .map_err(|reason| format!("Failed to decode JSON because: '{reason}'"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_json_plaintext() {
+        let mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Application,
+                sub_type: SubMimeType::JSON,
+                original: "application/json".to_string(),
+            },
+            length: 13u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+
+        let body = r#"{"foo":"bar"}"#;
+
+        parse_body_json(&mime_info, body).expect("Parsing the body should succeed");
+    }
+
+    #[test]
+    fn parse_multiline_json() {
+        let mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Application,
+                sub_type: SubMimeType::JSON,
+                original: "application/json".to_string(),
+            },
+            length: 34u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+
+        let body = r#"{
+  "foo": "bar",
+  "baz": "qux"
+}"#;
+
+        parse_body_json(&mime_info, body).expect("Parsing a multiline JSON body should succeed");
+    }
+
+    #[test]
+    fn parse_json_incorrect_length() {
+        let mime_info = MimeParseInfo {
+            content_type: MimeType {
+                main_type: MainMimeType::Application,
+                sub_type: SubMimeType::JSON,
+                original: "application/json".to_string(),
+            },
+            length: 10u64,
+            boundary: None,
+            charset: None,
+            encoding: vec![],
+        };
+
+        let body = r#"{"foo":"bar"}"#;
+
+        parse_body_json(&mime_info, body)
+            .expect_err("An error should be thrown when the Content-Length is wrong");
+    }
+
+    // TODO: add tests for encodings, charsets, and boundaries
+}
