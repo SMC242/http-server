@@ -1,3 +1,4 @@
+use super::{body, headers};
 use std::{collections::HashMap, str::FromStr};
 
 #[derive(Debug, PartialEq)]
@@ -131,6 +132,22 @@ impl std::fmt::Display for RequestParseError {
             Self::UnsupportedVersion(version) => format!("Unsupported version \"{version}\""),
         };
         write!(f, "{prelude}\n=>{content}")
+    }
+}
+
+impl Request<std::str::Bytes<'_>> {
+    pub fn read_body_text(self) -> Result<String, RequestParseError> {
+        let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
+        body::parse_body_text(&mime_info, self.body).map_err(|e| {
+            RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
+        })
+    }
+
+    pub fn read_body_json(self) -> Result<body::Json, RequestParseError> {
+        let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
+        body::parse_body_json(&mime_info, self.body).map_err(|e| {
+            RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
+        })
     }
 }
 
