@@ -1,8 +1,5 @@
 use super::types::*;
-use std::{
-    collections::HashMap,
-    str::{FromStr, Lines},
-};
+use std::{collections::HashMap, str::FromStr};
 
 struct StartLine {
     method: HTTPMethod,
@@ -92,16 +89,6 @@ pub fn parse_req_head<'a>(
         version,
         headers,
     })
-}
-
-pub fn parse_req_body(req: &mut Lines) -> Result<RequestBody, RequestParseError> {
-    let body: String = req.collect();
-    // Interpreting bodies as text for now
-    if !body.is_empty() {
-        Ok(Some(body))
-    } else {
-        Ok(None)
-    }
 }
 
 #[cfg(test)]
