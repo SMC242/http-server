@@ -10,6 +10,18 @@ pub fn decode_body(encoding: &[ContentEncoding], body: Vec<u8>) -> Result<String
     String::from_utf8(body).or(Err("Failed to decode bytes as UTF-8"))
 }
 
+fn read_body(length: u64, body: &str) -> Result<Vec<u8>, String> {
+    let expected_length = length.try_into().expect("The server should be 64-bit");
+    let bytes: Vec<u8> = body.bytes().take(expected_length).collect();
+
+    let actual_length = bytes.len();
+    if actual_length != expected_length {
+        Err(format!("Content-Length ({expected_length}) is greater than the actual length ({actual_length})"))
+    } else {
+        Ok(bytes)
+    }
+}
+
 pub fn parse_body_json(parse_info: &MimeParseInfo, body: &str) -> Result<Json, String> {
     if !matches!(
         parse_info.content_type,
@@ -23,17 +35,8 @@ pub fn parse_body_json(parse_info: &MimeParseInfo, body: &str) -> Result<Json, S
     }
 
     // FIXME: this assumes that the charset is UTF-8. Use encoding_rs to decode first
-    let expected_length = parse_info
-        .length
-        .try_into()
-        .expect("The server should be 64-bit");
-    let content_bytes: Vec<u8> = body.bytes().take(expected_length).collect();
+    let content_bytes = read_body(parse_info.length, body)?;
     let content: String = decode_body(&parse_info.encoding, content_bytes)?;
-
-    let actual_length = content.len();
-    if actual_length != expected_length {
-        return Err(format!("Content-Length ({expected_length}) is greater than the actual length ({actual_length})"));
-    }
 
     serde_json::from_str::<Json>(content.as_str())
         .map_err(|reason| format!("Failed to decode JSON because: '{reason}'"))
