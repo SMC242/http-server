@@ -37,6 +37,7 @@ pub type RequestBody = Option<String>;
 pub struct Request {
     head: RequestHead,
     body: RequestBody,
+    pub head: RequestHead,
 }
 
 #[derive(Debug, PartialEq)]
