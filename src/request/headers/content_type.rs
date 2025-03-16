@@ -17,7 +17,7 @@ pub struct MimeParseInfo {
     pub boundary: Option<String>,
     pub content_type: MimeType,
     pub charset: Option<String>, // TODO: Handle decoding downstream with encoding_rs
-    pub encoding: Option<ContentEncoding>,
+    pub encoding: Option<Vec<ContentEncoding>>,
 }
 
 struct ContentTypeInfo {
@@ -26,6 +26,8 @@ struct ContentTypeInfo {
     boundary: Option<String>,
 }
 
+/// Use `parse_content_encoding` instead of calling this directly
+/// because Content-Encoding headers can have multiple encodings
 impl FromStr for ContentEncoding {
     type Err = RequestParseError;
 
@@ -41,6 +43,16 @@ impl FromStr for ContentEncoding {
             ))),
         }
     }
+}
+
+/// The Content-Encoding header may have a series of encodings,
+/// representing a the order that encodings were applied.
+/// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Encoding
+pub fn parse_content_encoding(s: &str) -> Result<Vec<ContentEncoding>, RequestParseError> {
+    s.split(",")
+        .map(str::trim)
+        .map(ContentEncoding::from_str)
+        .collect()
 }
 
 pub fn parse_content_type(content_type: &String) -> Result<ContentTypeInfo, RequestParseError> {
@@ -106,7 +118,7 @@ pub fn parse_mime_info(headers: HTTPHeaders) -> Result<MimeParseInfo, RequestPar
 
     let encoding = headers
         .get("content-encoding")
-        .map(|enc| ContentEncoding::from_str(enc))
+        .map(|enc| parse_content_encoding(enc))
         .transpose()?;
     let content_type = headers
         .get("content-type")
@@ -332,6 +344,41 @@ mod tests {
             "Should be video/mp4"
         );
         assert_eq!(length, 1024u64);
-        assert_eq!(encoding, Some(ContentEncoding::Compress));
+        assert_eq!(encoding, Some(vec![ContentEncoding::Compress]));
+    }
+
+    #[test]
+    fn with_multiple_encodings() {
+        // NOTE: the inconsistent whitespace in Content-Encoding is to
+        // check that the parser is whitespace-tolerant
+        let MimeParseInfo {
+            content_type,
+            length,
+            encoding,
+            ..
+        } = parse_mime_info(new_http_headers(&[
+            ("content-type", "video/mp4"),
+            ("content-length", "1024"),
+            ("content-encoding", "compress,deflate, gzip"),
+        ]))
+        .expect("Parsing with multiple Content-Encodings should succeed");
+        assert_eq!(
+            content_type,
+            MimeType {
+                main_type: MainMimeType::Video,
+                sub_type: SubMimeType::MP4,
+                original: "video/mp4".to_string()
+            },
+            "Should be video/mp4"
+        );
+        assert_eq!(length, 1024u64);
+        assert_eq!(
+            encoding,
+            Some(vec![
+                ContentEncoding::Compress,
+                ContentEncoding::Deflate,
+                ContentEncoding::Gzip
+            ])
+        );
     }
 }
