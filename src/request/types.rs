@@ -152,7 +152,7 @@ impl Request<std::str::Bytes<'_>> {
 }
 
 #[cfg(test)]
-mod tests {
+mod version_tests {
     use super::*;
 
     #[test]
@@ -195,6 +195,11 @@ mod tests {
     fn http_version_parse_no_version() {
         HTTPVersion::from_str("HTTP/").expect_err("Parsing strings without versions should fail");
     }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
 
     #[test]
     fn path_parse_origin_form() {
@@ -284,6 +289,11 @@ mod tests {
     fn path_parse_garbage() {
         Path::from_str("aghajgaajagkajakaj").expect_err("Parsing garbage strings should fail");
     }
+}
+
+#[cfg(test)]
+mod method_tests {
+    use super::*;
 
     #[test]
     fn method_parse() {
