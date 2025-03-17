@@ -66,7 +66,7 @@ pub fn parse_body_json(
 // TODO: multipart parser
 
 #[cfg(test)]
-mod tests {
+mod json_tests {
     use super::*;
 
     #[test]
@@ -181,6 +181,11 @@ mod tests {
         parse_body_json(&mime_info, r#""#.bytes())
             .expect_err("Parsing an empty body as JSON should fail");
     }
+}
+
+#[cfg(test)]
+mod text_tests {
+    use super::*;
 
     #[test]
     fn parse_html() {
