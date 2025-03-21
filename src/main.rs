@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+mod mime;
 mod request;
 mod server;
 
@@ -29,10 +30,10 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     let mut request_content = String::new();
     // Read until end of request head (empty line).
     // NOTE: further reading will be required to get the request body
-    let reader = stream.try_clone().map(BufReader::new)?;
+    let mut reader = stream.try_clone().map(BufReader::new)?;
     // This ultimately does 2 passes through the connection :( Would it be possible to cut out
     // the first pass? The main reason for it is to unwrap each line
-    for line in reader.lines() {
+    for line in reader.by_ref().lines() {
         let mut unwrapped = line?;
         if unwrapped.is_empty() {
             break;
@@ -46,7 +47,9 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
 
     info!(target: "listener", "Parsing message from {client_ip} as HTTP request");
     // This iterator will be adavanced to the request body
-    let request = request::http1_1::parse_req_head(&mut request_content.lines()).map_err(|err| {
+    //let readerfn: FnMut(usize) -> Box<[u8]> = |size| reader.read(&mut Box::new([0u8; size]));
+    let req_lines = &mut request_content.lines();
+    let request = request::http1_1::parse_req_head(req_lines).map_err(|err| {
         info!(target: "listener", "Failed to parse request from {client_ip} due to the following error: {err}");
         IoError::new(
             ErrorKind::InvalidData,
@@ -55,7 +58,11 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     })?;
 
     // TODO: read body if required
-
+    // Somehow convert the lines back into bytes, lazily
+    //let body: request::RequestBody = reader.bytes();
+    let mut bodybuf: Vec<u8> = Vec::new();
+    reader.read(&mut bodybuf).unwrap();
+    println!("Body: {0}", String::from_utf8(bodybuf).unwrap());
     info!(target: "listener", "Request received from {client_ip}: {request:?}");
     stream.write_all(DEFAULT_RESPONSE.as_bytes())
 }
