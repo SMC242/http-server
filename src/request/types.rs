@@ -1,4 +1,7 @@
-use super::{body, headers};
+use super::{
+    body::{self, BodyReader},
+    headers,
+};
 use std::{collections::HashMap, str::FromStr};
 
 #[derive(Debug, PartialEq)]
@@ -35,9 +38,9 @@ pub struct RequestHead {
 
 pub type RequestBody = Option<String>;
 
-pub struct Request<I: Iterator<Item = u8>> {
+pub struct Request {
     pub head: RequestHead,
-    body: I,
+    body: Box<dyn BodyReader>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -135,17 +138,17 @@ impl std::fmt::Display for RequestParseError {
     }
 }
 
-impl Request<std::str::Bytes<'_>> {
+impl Request {
     pub fn read_body_text(self) -> Result<String, RequestParseError> {
         let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
-        body::parse_body_text(&mime_info, self.body).map_err(|e| {
+        self.body.text(&mime_info).map_err(|e| {
             RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
         })
     }
 
     pub fn read_body_json(self) -> Result<body::Json, RequestParseError> {
         let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
-        body::parse_body_json(&mime_info, self.body).map_err(|e| {
+        self.body.json(&mime_info).map_err(|e| {
             RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
         })
     }

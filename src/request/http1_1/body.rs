@@ -1,3 +1,9 @@
+use std::{
+    io::{BufReader, Cursor, Read},
+    net::TcpStream,
+    sync::{Arc, Mutex},
+};
+
 use crate::mime::{MainMimeType, MimeType, SubMimeType};
 
 use super::{content_type::ContentEncoding, headers::content_type::MimeParseInfo};
@@ -10,9 +16,30 @@ pub fn decode_body(encoding: &[ContentEncoding], body: Vec<u8>) -> Result<String
     String::from_utf8(body).or(Err("Failed to decode bytes as UTF-8"))
 }
 
-fn read_body(length: u64, body: impl Iterator<Item = u8>) -> Result<Vec<u8>, String> {
+// FIXME: these traits should be moved to the types module
+pub trait Stream: Send + Sync {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize>;
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
+}
+
+pub trait BodyReader {
+    fn text(&self, mime_info: &MimeParseInfo) -> Result<String, String>;
+    fn json(&self, mime_info: &MimeParseInfo) -> Result<Json, String>;
+    // TODO: add multipart parsing. Will require a breaking change
+}
+
+// FIXME: this should be moved to the HTTP1_1 module
+pub struct HTTP1_1BodyReader<R: Read = TcpStream> {
+    stream: Arc<Mutex<BufReader<R>>>,
+}
+
+fn read_body<Stream: Read>(length: u64, reader: &mut BufReader<Stream>) -> Result<Vec<u8>, String> {
     let expected_length = length.try_into().expect("The server should be 64-bit");
-    let bytes: Vec<u8> = body.take(expected_length).collect();
+    let mut bytes: Vec<u8> = vec![0; expected_length];
+
+    reader
+        .read_exact(&mut bytes)
+        .or(Err("Could not read from stream"))?;
 
     let actual_length = bytes.len();
     if actual_length != expected_length {
@@ -22,48 +49,49 @@ fn read_body(length: u64, body: impl Iterator<Item = u8>) -> Result<Vec<u8>, Str
     }
 }
 
-pub fn parse_body_text(
-    parse_info: &MimeParseInfo,
-    body: impl Iterator<Item = u8>,
-) -> Result<String, String> {
-    if !matches!(
-        parse_info.content_type,
-        MimeType {
-            main_type: MainMimeType::Text,
-            ..
-        },
-    ) {
-        return Err("Not a text document".to_string());
+impl<R: Read> BodyReader for HTTP1_1BodyReader<R> {
+    fn text(&self, parse_info: &MimeParseInfo) -> Result<String, String> {
+        if !matches!(
+            parse_info.content_type,
+            MimeType {
+                main_type: MainMimeType::Text,
+                ..
+            },
+        ) {
+            return Err("Not a text document".to_string());
+        }
+
+        let mut reader = self.stream.lock().unwrap();
+        let bytes = read_body(parse_info.length, &mut *reader)?;
+        decode_body(&parse_info.encoding, bytes).map_err(|e| e.to_string())
     }
 
-    let bytes = read_body(parse_info.length, body)?;
-    decode_body(&parse_info.encoding, bytes).map_err(|e| e.to_string())
-}
+    fn json(&self, parse_info: &MimeParseInfo) -> Result<Json, String> {
+        if !matches!(
+            parse_info.content_type,
+            MimeType {
+                main_type: MainMimeType::Application,
+                sub_type: SubMimeType::JSON,
+                ..
+            },
+        ) {
+            return Err("Not JSON".to_string());
+        }
 
-pub fn parse_body_json(
-    parse_info: &MimeParseInfo,
-    body: impl Iterator<Item = u8>,
-) -> Result<Json, String> {
-    if !matches!(
-        parse_info.content_type,
-        MimeType {
-            main_type: MainMimeType::Application,
-            sub_type: SubMimeType::JSON,
-            ..
-        },
-    ) {
-        return Err("Not JSON".to_string());
+        // FIXME: this assumes that the charset is UTF-8. Use encoding_rs to decode first
+        let mut reader = self.stream.lock().unwrap();
+        let content_bytes = read_body(parse_info.length, &mut *reader)?;
+        let content: String = decode_body(&parse_info.encoding, content_bytes)?;
+
+        serde_json::from_str::<Json>(content.as_str())
+            .map_err(|reason| format!("Failed to decode JSON because: '{reason}'"))
     }
-
-    // FIXME: this assumes that the charset is UTF-8. Use encoding_rs to decode first
-    let content_bytes = read_body(parse_info.length, body)?;
-    let content: String = decode_body(&parse_info.encoding, content_bytes)?;
-
-    serde_json::from_str::<Json>(content.as_str())
-        .map_err(|reason| format!("Failed to decode JSON because: '{reason}'"))
 }
 
 // TODO: multipart parser
+fn mock_stream(content: &'static str) -> Arc<Mutex<BufReader<Cursor<Vec<u8>>>>> {
+    Arc::new(Mutex::new(BufReader::new(Cursor::new(content.into()))))
+}
 
 #[cfg(test)]
 mod json_tests {
@@ -83,9 +111,11 @@ mod json_tests {
             encoding: vec![],
         };
 
-        let body = r#"{"foo":"bar"}"#;
-
-        parse_body_json(&mime_info, body.bytes()).expect("Parsing the body should succeed");
+        HTTP1_1BodyReader {
+            stream: mock_stream(r#"{"foo":"bar"}"#),
+        }
+        .json(&mime_info)
+        .expect("Parsing the body should succeed");
     }
 
     #[test]
@@ -102,13 +132,16 @@ mod json_tests {
             encoding: vec![],
         };
 
-        let body = r#"{
+        HTTP1_1BodyReader {
+            stream: mock_stream(
+                r#"{
   "foo": "bar",
   "baz": "qux"
-}"#;
-
-        parse_body_json(&mime_info, body.bytes())
-            .expect("Parsing a multiline JSON body should succeed");
+}"#,
+            ),
+        }
+        .json(&mime_info)
+        .expect("Parsing a multiline JSON body should succeed");
     }
 
     #[test]
@@ -125,10 +158,11 @@ mod json_tests {
             encoding: vec![],
         };
 
-        let body = r#"{"foo":"bar"}"#;
-
-        parse_body_json(&mime_info, body.bytes())
-            .expect_err("An error should be thrown when the Content-Length is wrong");
+        HTTP1_1BodyReader {
+            stream: mock_stream(r#"{"foo":"bar"}"#),
+        }
+        .json(&mime_info)
+        .expect_err("An error should be thrown when the Content-Length is wrong");
     }
 
     #[test]
@@ -145,8 +179,11 @@ mod json_tests {
             encoding: vec![],
         };
 
-        parse_body_json(&incorrect_mime_info, "lol".bytes())
-            .expect_err("Calling parse_body_json when the MIME type is not JSON should fail");
+        HTTP1_1BodyReader {
+            stream: mock_stream("lol"),
+        }
+        .json(&incorrect_mime_info)
+        .expect_err("Calling parse_body_json when the MIME type is not JSON should fail");
 
         let correct_mime_info = MimeParseInfo {
             content_type: MimeType {
@@ -160,8 +197,11 @@ mod json_tests {
             encoding: vec![],
         };
 
-        parse_body_json(&correct_mime_info, r#"not a json"#.bytes())
-            .expect_err("Parsing a body that is not JSON as JSON should fail");
+        HTTP1_1BodyReader {
+            stream: mock_stream(r#"not a json"#),
+        }
+        .json(&correct_mime_info)
+        .expect_err("Parsing a body that is not JSON as JSON should fail");
     }
 
     #[test]
@@ -178,8 +218,11 @@ mod json_tests {
             encoding: vec![],
         };
 
-        parse_body_json(&mime_info, r#""#.bytes())
-            .expect_err("Parsing an empty body as JSON should fail");
+        HTTP1_1BodyReader {
+            stream: mock_stream(r#""#),
+        }
+        .json(&mime_info)
+        .expect_err("Parsing an empty body as JSON should fail");
     }
 }
 
@@ -200,10 +243,11 @@ mod text_tests {
             charset: None,
             encoding: vec![],
         };
-        let body = r#"<!doctype html><title>a</title>"#;
-
-        let result = parse_body_text(&mime_info, body.bytes())
-            .expect("Parsing a basic HTML document should succeed");
+        let result = HTTP1_1BodyReader {
+            stream: mock_stream(r#"<!doctype html><title>a</title>"#),
+        }
+        .text(&mime_info)
+        .expect("Parsing a basic HTML document should succeed");
         assert_eq!(result, "<!doctype html><title>a</title>".to_string());
     }
 
@@ -220,10 +264,12 @@ mod text_tests {
             charset: None,
             encoding: vec![],
         };
-        let body = r#""#;
 
-        let result = parse_body_text(&mime_info, body.bytes())
-            .expect("Parsing an empty HTML document should succeed");
+        let result = HTTP1_1BodyReader {
+            stream: mock_stream(r#""#),
+        }
+        .text(&mime_info)
+        .expect("Parsing an empty HTML document should succeed");
         assert_eq!(result, "".to_string());
     }
 
@@ -240,10 +286,12 @@ mod text_tests {
             charset: None,
             encoding: vec![],
         };
-        let body = r#"IDK what an MP3 file looks like"#;
 
-        parse_body_text(&mime_info, body.bytes())
-            .expect_err("Parsing a non-text document should fail");
+        HTTP1_1BodyReader {
+            stream: mock_stream(r#"IDK what an .mp3 file looks like"#),
+        }
+        .text(&mime_info)
+        .expect_err("Parsing a non-text document should fail");
     }
     // TODO: add tests for encodings, charsets, and boundaries
 }
