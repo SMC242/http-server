@@ -5,30 +5,14 @@ use std::{
 };
 
 use crate::mime::{MainMimeType, MimeType, SubMimeType};
-
-use super::{content_type::ContentEncoding, headers::content_type::MimeParseInfo};
-
-/// An arbitrary JSON
-pub type Json = serde_json::Value;
+use crate::request::content_type::{ContentEncoding, MimeParseInfo};
+use crate::request::types::{BodyReader, Json};
 
 pub fn decode_body(encoding: &[ContentEncoding], body: Vec<u8>) -> Result<String, &'static str> {
     // TODO: Use flate2 and rust-brotli to decode the body
     String::from_utf8(body).or(Err("Failed to decode bytes as UTF-8"))
 }
 
-// FIXME: these traits should be moved to the types module
-pub trait Stream: Send + Sync {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize>;
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
-}
-
-pub trait BodyReader {
-    fn text(&self, mime_info: &MimeParseInfo) -> Result<String, String>;
-    fn json(&self, mime_info: &MimeParseInfo) -> Result<Json, String>;
-    // TODO: add multipart parsing. Will require a breaking change
-}
-
-// FIXME: this should be moved to the HTTP1_1 module
 pub struct HTTP1_1BodyReader<R: Read = TcpStream> {
     stream: Arc<Mutex<BufReader<R>>>,
 }

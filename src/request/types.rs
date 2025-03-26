@@ -2,6 +2,9 @@ use super::headers;
 use crate::request::content_type::MimeParseInfo;
 use std::{collections::HashMap, str::FromStr};
 
+/// An arbitrary JSON
+pub type Json = serde_json::Value;
+
 #[derive(Debug, PartialEq)]
 pub enum Path {
     OriginForm(String),
@@ -38,6 +41,10 @@ pub type RequestBody = Option<String>;
 
 pub struct Request {
     pub head: RequestHead,
+    // NOTE: calls to to read the body should be infrequent enough that the
+    // cost of a v-table is insignificant. Realistically, the body will only be read once per
+    // request
+    // TODO: test what happens if multiple handlers read the body
     body: Box<dyn BodyReader>,
 }
 
@@ -57,6 +64,17 @@ pub enum HTTPVersion {
     V1_1,
     V2,
     V3,
+}
+
+pub trait Stream: Send + Sync {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize>;
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
+}
+
+pub trait BodyReader {
+    fn text(&self, mime_info: &MimeParseInfo) -> Result<String, String>;
+    fn json(&self, mime_info: &MimeParseInfo) -> Result<Json, String>;
+    // TODO: add multipart parsing. Will require a breaking change
 }
 
 impl FromStr for Path {
@@ -144,7 +162,7 @@ impl Request {
         })
     }
 
-    pub fn read_body_json(self) -> Result<body::Json, RequestParseError> {
+    pub fn read_body_json(self) -> Result<Json, RequestParseError> {
         let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
         self.body.json(&mime_info).map_err(|e| {
             RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
