@@ -1,4 +1,4 @@
-use super::types::*;
+use crate::request::types::*;
 use std::{collections::HashMap, str::FromStr};
 
 struct StartLine {

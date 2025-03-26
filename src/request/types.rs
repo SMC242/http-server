@@ -1,7 +1,5 @@
-use super::{
-    body::{self, BodyReader},
-    headers,
-};
+use super::headers;
+use crate::request::content_type::MimeParseInfo;
 use std::{collections::HashMap, str::FromStr};
 
 #[derive(Debug, PartialEq)]

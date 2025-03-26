@@ -3,7 +3,6 @@ use std::str::FromStr;
 // Re-exports
 mod headers;
 pub use headers::*;
-mod body;
 pub mod http1_1;
 mod types;
 pub use types::*;
