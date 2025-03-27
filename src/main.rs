@@ -1,4 +1,4 @@
-use log::{error, info};
+use log::{debug, error, info};
 use std::io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write};
 use std::{
     net::{Ipv4Addr, TcpStream},
@@ -49,21 +49,18 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     // This iterator will be adavanced to the request body
     //let readerfn: FnMut(usize) -> Box<[u8]> = |size| reader.read(&mut Box::new([0u8; size]));
     let req_lines = &mut request_content.lines();
-    let request = request::http1_1::parse_req_head(req_lines).map_err(|err| {
+    let req_head = request::http1_1::parse_req_head(req_lines).map_err(|err| {
         info!(target: "listener", "Failed to parse request from {client_ip} due to the following error: {err}");
         IoError::new(
             ErrorKind::InvalidData,
             "Could not parse message as HTTP request",
         )
     })?;
+    info!(target: "listener", "Request received from {client_ip}: {req_head:?}");
 
-    // TODO: read body if required
-    // Somehow convert the lines back into bytes, lazily
-    //let body: request::RequestBody = reader.bytes();
-    let mut bodybuf: Vec<u8> = Vec::new();
-    reader.read(&mut bodybuf).unwrap();
-    println!("Body: {0}", String::from_utf8(bodybuf).unwrap());
-    info!(target: "listener", "Request received from {client_ip}: {request:?}");
+    let request = request::Request::new(req_head, reader);
+    debug!("body of request: {0:?}", request.read_body_json());
+
     stream.write_all(DEFAULT_RESPONSE.as_bytes())
 }
 
