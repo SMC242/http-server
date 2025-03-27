@@ -39,13 +39,13 @@ pub struct RequestHead {
 
 pub type RequestBody = Option<String>;
 
-pub struct Request {
+pub struct Request<'a> {
     pub head: RequestHead,
     // NOTE: calls to to read the body should be infrequent enough that the
     // cost of a v-table is insignificant. Realistically, the body will only be read once per
     // request
     // TODO: test what happens if multiple handlers read the body
-    body: Box<dyn BodyReader>,
+    body: Box<dyn BodyReader + 'a>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -154,7 +154,7 @@ impl std::fmt::Display for RequestParseError {
     }
 }
 
-impl Request {
+impl<'a> Request<'a> {
     pub fn read_body_text(self) -> Result<String, RequestParseError> {
         let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
         self.body.text(&mime_info).map_err(|e| {
