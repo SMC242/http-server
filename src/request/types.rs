@@ -1,6 +1,10 @@
-use super::headers;
+use super::{headers, http1_1::HTTP1_1BodyReader};
 use crate::request::content_type::MimeParseInfo;
-use std::{collections::HashMap, str::FromStr};
+use std::{
+    collections::HashMap,
+    io::{BufReader, Read},
+    str::FromStr,
+};
 
 /// An arbitrary JSON
 pub type Json = serde_json::Value;
@@ -155,6 +159,25 @@ impl std::fmt::Display for RequestParseError {
 }
 
 impl<'a> Request<'a> {
+    pub fn new<R: Read + 'a>(head: RequestHead, reader: BufReader<R>) -> Self {
+        let reader_wrapper = match head.version {
+            HTTPVersion::V1_1 | HTTPVersion::V0_9 | HTTPVersion::V1_0 => {
+                HTTP1_1BodyReader::new(reader)
+            }
+            HTTPVersion::V2 => {
+                todo!("Implement a BodyReader for HTTP/2 and add it to the Request constructor")
+            }
+            HTTPVersion::V3 => {
+                todo!("Implement a BodyReader for HTTP/3 and add it to the Request constructor")
+            }
+        };
+
+        Self {
+            head,
+            body: Box::new(reader_wrapper),
+        }
+    }
+
     pub fn read_body_text(self) -> Result<String, RequestParseError> {
         let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
         self.body.text(&mime_info).map_err(|e| {
