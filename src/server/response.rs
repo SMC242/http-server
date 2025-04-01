@@ -1,6 +1,7 @@
 use crate::request::HTTPHeaders;
 
 // See https://stackoverflow.com/a/36928678
+// Generated from en.wikipedia.org/wiki/List_of_HTTP_status_codes
 pub enum ResponseStatus {
     Continue = 100,
     SwitchingProtocols = 101,
