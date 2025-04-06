@@ -5,7 +5,7 @@ use crate::request::HTTPHeaders;
 
 // See https://stackoverflow.com/a/36928678
 // Generated from en.wikipedia.org/wiki/List_of_HTTP_status_codes
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ResponseStatus {
     Continue,
     SwitchingProtocols,
@@ -95,6 +95,19 @@ impl Display for ResponseStatus {
         write!(f, "{s}")
     }
 }
+
+impl PartialOrd for ResponseStatus {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ResponseStatus {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let (c1, c2) = (self.to_code(), other.to_code());
+        c1.cmp(&c2)
+    }
+}
 impl ResponseStatus {
     // Use https://stackoverflow.com/a/28029279
     pub fn is_ok(&self) -> bool {
@@ -172,6 +185,7 @@ impl ResponseStatus {
     }
 }
 
+#[derive(Debug)]
 pub struct Response {
     status: u16,
     headers: HTTPHeaders,
