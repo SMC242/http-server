@@ -75,6 +75,7 @@ pub enum ResponseStatus {
     NonStandard(u16, String),
 }
 
+/// Converts PascalCase to TitleCase
 fn unpascal_case(s: &str) -> Cow<'_, str> {
     let regex = Regex::new("([a-z])([A-Z])").expect("The regex should compile");
     regex.replace_all(s, "$1 $2")
