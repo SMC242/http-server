@@ -2,6 +2,7 @@ use crate::request::HTTPHeaders;
 
 // See https://stackoverflow.com/a/36928678
 // Generated from en.wikipedia.org/wiki/List_of_HTTP_status_codes
+#[derive(Clone, PartialEq, Debug)]
 pub enum ResponseStatus {
     Continue = 100,
     SwitchingProtocols = 101,
@@ -71,11 +72,12 @@ pub enum ResponseStatus {
 impl ResponseStatus {
     // Use https://stackoverflow.com/a/28029279
     pub fn is_ok(&self) -> bool {
-        *self as u16 >= 200 && *self as u16 <= 300
+        let code = self.to_code();
+        code >= 200 && code <= 300
     }
 
     pub fn to_code(&self) -> u16 {
-        *self as u16
+        self.clone() as u16
     }
 }
 pub struct Response {
