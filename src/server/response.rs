@@ -1,3 +1,6 @@
+use regex::Regex;
+use std::{borrow::Cow, fmt::Display};
+
 use crate::request::HTTPHeaders;
 
 // See https://stackoverflow.com/a/36928678
@@ -71,8 +74,27 @@ pub enum ResponseStatus {
     /// See https://en.wikipedia.org/wiki/List_of_HTTP_status_codes#Unofficial_codes
     NonStandard(u16, String),
 }
+
+fn unpascal_case(s: &str) -> Cow<'_, str> {
+    let regex = Regex::new("([a-z])([A-Z])").expect("The regex should compile");
+    regex.replace_all(s, "$1 $2")
 }
 
+impl Display for ResponseStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Most names can just be un-pascal-cased but there are exceptions (E.G hyphenated or
+        // containing apostrophes)
+        let s: String = match self {
+            Self::NonAuthoritativeInformation => "Non-Authoritative Information".to_string(),
+            Self::MultiStatus => "Mutli-Status".to_string(),
+            Self::Imateapot => "I'm A Teapot".to_string(),
+            Self::NonStandard(code, name) => format!("{code} {name}"),
+            pascal_cased => unpascal_case(&pascal_cased.to_string()).to_string(),
+        };
+
+        write!(f, "{s}")
+    }
+}
 impl ResponseStatus {
     // Use https://stackoverflow.com/a/28029279
     pub fn is_ok(&self) -> bool {
@@ -149,6 +171,7 @@ impl ResponseStatus {
         }
     }
 }
+
 pub struct Response {
     status: u16,
     headers: HTTPHeaders,
