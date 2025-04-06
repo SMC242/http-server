@@ -67,6 +67,9 @@ pub enum ResponseStatus {
     LoopDetected,
     NotExtended,
     NetworkAuthenticationRequired,
+    /// For non-standard status codes such as "521 Web Server Is Down"
+    /// See https://en.wikipedia.org/wiki/List_of_HTTP_status_codes#Unofficial_codes
+    NonStandard(u16, String),
 }
 }
 
@@ -142,6 +145,7 @@ impl ResponseStatus {
             Self::LoopDetected => 508,
             Self::NotExtended => 510,
             Self::NetworkAuthenticationRequired => 511,
+            Self::NonStandard(code, _) => *code,
         }
     }
 }
