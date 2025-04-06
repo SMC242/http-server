@@ -77,7 +77,7 @@ impl ResponseStatus {
     // Use https://stackoverflow.com/a/28029279
     pub fn is_ok(&self) -> bool {
         let code = self.to_code();
-        code >= 200 && code <= 300
+        (200..=300).contains(&code)
     }
 
     pub fn to_code(&self) -> u16 {
