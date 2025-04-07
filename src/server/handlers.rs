@@ -71,7 +71,10 @@ impl<'a> Handler<'a> {
 }
 
 #[derive(Debug)]
-struct DuplicateKey(HandlerRegistryKey);
+pub enum HandlerRegistryAddError {
+    DuplicateKey(HandlerRegistryKey),
+    UnhandlableMethod(HTTPMethod),
+}
 
 impl<'a> HandlerRegistry<'a> {
     pub fn new(handlers: Vec<Handler<'a>>) -> Self {
@@ -82,14 +85,21 @@ impl<'a> HandlerRegistry<'a> {
         HandlerRegistry { handlers: registry }
     }
 
-    pub fn add(&mut self, handler: Handler<'a>) -> Result<(), DuplicateKey> {
+    pub fn add(&mut self, handler: Handler<'a>) -> Result<(), HandlerRegistryAddError> {
+        if matches!(
+            handler.method,
+            HTTPMethod::Trace | HTTPMethod::Connect | HTTPMethod::Options
+        ) {
+            return Err(HandlerRegistryAddError::UnhandlableMethod(handler.method));
+        }
+
         let key = HandlerRegistryKey::from(&handler);
 
         if let Entry::Vacant(e) = self.handlers.entry(key.clone()) {
             e.insert(handler);
             Ok(())
         } else {
-            Err(DuplicateKey(key))
+            Err(HandlerRegistryAddError::DuplicateKey(key))
         }
     }
 
