@@ -192,3 +192,13 @@ pub struct Response {
     headers: HTTPHeaders,
     body: String,
 }
+
+impl Response {
+    pub fn new(status: ResponseStatus, headers: HTTPHeaders, body: String) -> Self {
+        Self {
+            status,
+            headers,
+            body,
+        }
+    }
+}
