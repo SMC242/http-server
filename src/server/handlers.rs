@@ -6,7 +6,7 @@ use crate::server::response::Response;
 
 static KEY_DELIMITER: &str = "[##]";
 
-type HandlerCallback<'a> = &'a mut dyn FnMut(Request) -> Response;
+type HandlerCallback = Box<dyn FnMut(Request) -> Response>;
 
 #[derive(PartialEq, Debug)]
 pub struct HandlerPath(String);
@@ -21,11 +21,11 @@ impl HandlerPath {
     }
 }
 
-pub struct Handler<'a> {
+pub struct Handler {
     path: HandlerPath,
     method: HTTPMethod,
     // See https://stackoverflow.com/questions/27831944/how-do-i-store-a-closure-in-a-struct-in-rust/27832320#27832320
-    pub callback: HandlerCallback<'a>,
+    pub callback: HandlerCallback,
 }
 
 /**
@@ -35,8 +35,8 @@ pub struct Handler<'a> {
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 struct HandlerRegistryKey(String);
 
-impl<'a> From<&Handler<'a>> for HandlerRegistryKey {
-    fn from(handler: &Handler<'a>) -> Self {
+impl From<&Handler> for HandlerRegistryKey {
+    fn from(handler: &Handler) -> Self {
         Self(format!(
             "{0}{KEY_DELIMITER}{1}",
             handler.method, handler.path.0
@@ -51,13 +51,13 @@ impl From<(HTTPMethod, String)> for HandlerRegistryKey {
 }
 
 #[derive(Default)]
-pub struct HandlerRegistry<'a> {
+pub struct HandlerRegistry {
     // TODO: figure out how to efficiently discriminate between HTTP methods
-    handlers: HashMap<HandlerRegistryKey, Handler<'a>>,
+    handlers: HashMap<HandlerRegistryKey, Handler>,
 }
 
-impl<'a> Handler<'a> {
-    pub fn new(method: HTTPMethod, path: &str, callback: HandlerCallback<'a>) -> Self {
+impl Handler {
+    pub fn new(method: HTTPMethod, path: &str, callback: HandlerCallback) -> Self {
         Self {
             path: HandlerPath(path.to_string()),
             method,
@@ -76,8 +76,8 @@ pub enum HandlerRegistryAddError {
     UnhandlableMethod(HTTPMethod),
 }
 
-impl<'a> HandlerRegistry<'a> {
-    pub fn new(handlers: Vec<Handler<'a>>) -> Self {
+impl HandlerRegistry {
+    pub fn new(handlers: Vec<Handler>) -> Self {
         let mut registry = HashMap::new();
         handlers.into_iter().for_each(|h| {
             registry.entry(HandlerRegistryKey::from(&h)).or_insert(h);
@@ -85,7 +85,7 @@ impl<'a> HandlerRegistry<'a> {
         HandlerRegistry { handlers: registry }
     }
 
-    pub fn add(&mut self, handler: Handler<'a>) -> Result<(), HandlerRegistryAddError> {
+    pub fn add(&mut self, handler: Handler) -> Result<(), HandlerRegistryAddError> {
         if matches!(
             handler.method,
             HTTPMethod::Trace | HTTPMethod::Connect | HTTPMethod::Options
@@ -103,7 +103,7 @@ impl<'a> HandlerRegistry<'a> {
         }
     }
 
-    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Handler<'a>> {
+    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Handler> {
         self.handlers
             .get(&HandlerRegistryKey::from((method, path.0)))
     }
