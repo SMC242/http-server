@@ -109,3 +109,52 @@ impl HandlerRegistry {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_handler() {
+        println!("Startting");
+        let handler = Handler::new(HTTPMethod::Get, "/", Box::new(|_| Response::default()));
+        let mut registry = HandlerRegistry::default();
+
+        registry
+            .add(handler)
+            .expect("Adding a GET handler for / should succeed");
+
+        let handler = registry
+            .get(HTTPMethod::Get, HandlerPath::new("/"))
+            .expect("A GET handler for / should be found");
+        assert_eq!(handler.method, HTTPMethod::Get);
+        assert_eq!(handler.path, HandlerPath::new("/"))
+    }
+
+    #[test]
+    fn add_unhandlable() {
+        let mut registry = HandlerRegistry::default();
+        registry
+            .add(Handler::new(
+                HTTPMethod::Connect,
+                "/connect",
+                Box::new(|_| Response::default()),
+            ))
+            .expect_err("Adding a handler for CONNECT should fail");
+
+        registry
+            .add(Handler::new(
+                HTTPMethod::Trace,
+                "/trace",
+                Box::new(|_| Response::default()),
+            ))
+            .expect_err("Adding a handler for TRACE should fail");
+
+        registry
+            .add(Handler::new(
+                HTTPMethod::Options,
+                "/options",
+                Box::new(|_| Response::default()),
+            ))
+            .expect_err("Adding a handler for OPTIONS should fail");
+    }
+}
