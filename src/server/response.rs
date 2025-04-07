@@ -188,6 +188,6 @@ impl ResponseStatus {
 
 #[derive(Debug)]
 pub struct Response {
-    status: u16,
+    status: ResponseStatus,
     headers: HTTPHeaders,
 }
