@@ -2,6 +2,7 @@ use super::{headers, http1_1::HTTP1_1BodyReader};
 use crate::request::content_type::MimeParseInfo;
 use std::{
     collections::HashMap,
+    fmt::Display,
     io::{BufReader, Read},
     str::FromStr,
 };
@@ -123,6 +124,12 @@ impl FromStr for HTTPMethod {
             "HEAD" => Ok(HTTPMethod::Head),
             _ => Err(()),
         }
+    }
+}
+
+impl Display for HTTPMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{0}", self.to_string().to_uppercase())
     }
 }
 
