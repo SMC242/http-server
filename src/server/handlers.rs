@@ -103,7 +103,9 @@ impl<'a> HandlerRegistry<'a> {
         }
     }
 
-    pub fn get(&self, method: HTTPMethod, path: String) -> Option<&Handler<'a>> {
-        self.handlers.get(&HandlerRegistryKey::from((method, path)))
+    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Handler<'a>> {
+        self.handlers
+            .get(&HandlerRegistryKey::from((method, path.0)))
     }
 }
+
