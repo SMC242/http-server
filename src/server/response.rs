@@ -190,4 +190,5 @@ impl ResponseStatus {
 pub struct Response {
     status: ResponseStatus,
     headers: HTTPHeaders,
+    body: String,
 }
