@@ -202,3 +202,13 @@ impl Response {
         }
     }
 }
+
+impl Default for Response {
+    fn default() -> Self {
+        Self {
+            status: ResponseStatus::OK,
+            headers: std::collections::HashMap::new(),
+            body: String::new(),
+        }
+    }
+}
