@@ -59,7 +59,7 @@ pub struct HandlerRegistry {
 impl Handler {
     pub fn new(method: HTTPMethod, path: &str, callback: HandlerCallback) -> Self {
         Self {
-            path: HandlerPath(path.to_string()),
+            path: HandlerPath::new(path),
             method,
             callback,
         }
