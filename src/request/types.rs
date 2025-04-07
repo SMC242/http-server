@@ -129,7 +129,8 @@ impl FromStr for HTTPMethod {
 
 impl Display for HTTPMethod {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{0}", self.to_string().to_uppercase())
+        let upper_cased = format!("{self:?}").to_uppercase();
+        write!(f, "{upper_cased}")
     }
 }
 
