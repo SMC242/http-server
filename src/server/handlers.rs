@@ -57,7 +57,7 @@ pub struct HandlerRegistry<'a> {
 }
 
 impl<'a> Handler<'a> {
-    pub fn new(path: &str, method: HTTPMethod, callback: HandlerCallback<'a>) -> Self {
+    pub fn new(method: HTTPMethod, path: &str, callback: HandlerCallback<'a>) -> Self {
         Self {
             path: HandlerPath(path.to_string()),
             method,
