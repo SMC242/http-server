@@ -32,7 +32,7 @@ pub struct Handler<'a> {
    A composite key from a handler. This is necessary because paths can be reused for
    different HTTP verbs
 */
-#[derive(Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 struct HandlerRegistryKey(String);
 
 impl<'a> From<&Handler<'a>> for HandlerRegistryKey {
@@ -70,6 +70,7 @@ impl<'a> Handler<'a> {
     }
 }
 
+#[derive(Debug)]
 struct DuplicateKey(HandlerRegistryKey);
 
 impl<'a> HandlerRegistry<'a> {
