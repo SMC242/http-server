@@ -6,7 +6,7 @@ use crate::server::response::Response;
 
 static KEY_DELIMITER: &str = "[##]";
 
-type HandlerCallback = Box<dyn FnMut(Request) -> Response>;
+pub type HandlerCallback = Box<dyn FnMut(Request) -> Response>;
 
 #[derive(PartialEq, Debug)]
 pub struct HandlerPath(String);
