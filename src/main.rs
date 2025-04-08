@@ -1,5 +1,5 @@
 use log::{debug, info};
-use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
+use std::io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write};
 use std::net::{Ipv4Addr, TcpStream};
 use std::time::Duration;
 
