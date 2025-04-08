@@ -10,7 +10,7 @@ use std::{
 /// An arbitrary JSON
 pub type Json = serde_json::Value;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Path {
     OriginForm(String),
     AbsoluteForm(String),
@@ -18,7 +18,7 @@ pub enum Path {
     Asterisk,                   // Used by the OPTIONS method
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HTTPMethod {
     Get,
     Post,
@@ -62,7 +62,7 @@ pub enum RequestParseError {
     UnsupportedVersion(String),
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Copy, Clone)]
 pub enum HTTPVersion {
     V0_9,
     V1_0,
