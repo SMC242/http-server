@@ -1,9 +1,7 @@
-use log::{debug, error, info};
-use std::io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write};
-use std::{
-    net::{Ipv4Addr, TcpStream},
-    time::Duration,
-};
+use log::{debug, info};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
+use std::net::{Ipv4Addr, TcpStream};
+use std::time::Duration;
 
 mod mime;
 mod request;
