@@ -92,6 +92,14 @@ pub enum HandlerRegistryAddError {
     UnhandlableMethod(HTTPMethod),
 }
 
+#[derive(Debug)]
+pub enum HandlerCallError {
+    /// Paths that can't be converted to origin form.
+    /// The server needs to know where to route to
+    UnhandlablePath(Path),
+    NoCompatibleHandler(HTTPMethod, Path),
+}
+
 impl HandlerRegistry {
     pub fn new(handlers: Vec<Arc<Mutex<dyn Handler>>>) -> Self {
         let mut registry = HashMap::new();
@@ -128,6 +136,20 @@ impl HandlerRegistry {
     pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<Mutex<dyn Handler>>> {
         self.handlers
             .get(&HandlerRegistryKey::from((method, path.0)))
+    }
+
+    pub fn dispatch(&self, req: &Request) -> Result<Response, HandlerCallError> {
+        let RequestHead {
+            method, ref path, ..
+        } = req.head;
+
+        let handler_path = path
+            .clone()
+            .try_into()
+            .or(Err(HandlerCallError::UnhandlablePath(path.clone())))?;
+        self.get(method, handler_path)
+            .map(|h| h.lock().unwrap().on_request(req))
+            .ok_or(HandlerCallError::NoCompatibleHandler(method, path.clone()))
     }
 }
 
