@@ -25,7 +25,7 @@ impl HandlerPath {
 pub trait Handler {
     fn get_path(&self) -> &HandlerPath;
     fn get_method(&self) -> &HTTPMethod;
-    fn on_request(&mut self, req: Request) -> Response;
+    fn on_request(&mut self, req: &Request) -> Response;
 }
 
 /**
