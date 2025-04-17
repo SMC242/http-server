@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::request::{HTTPMethod, Request};
+use crate::request::{HTTPMethod, Path, Request, RequestHead};
 use crate::server::response::Response;
 
 static KEY_DELIMITER: &str = "[##]";
@@ -19,6 +19,35 @@ impl HandlerPath {
             panic!("Invalid path {path}. Must be a relative path")
         }
         Self(path.strip_suffix('/').unwrap_or(path).to_string())
+    }
+}
+
+impl TryFrom<Path> for HandlerPath {
+    type Error = &'static str;
+
+    fn try_from(value: Path) -> Result<HandlerPath, Self::Error> {
+        match value {
+            Path::Asterisk => Err("Can't convert from asterisk form: it's only used for OPTIONS"),
+            Path::AuthorityForm(..) => {
+                Err("Can't convert from authority form: it's only used for CONNECT")
+            }
+            Path::OriginForm(path) => Ok(HandlerPath(path)),
+            Path::AbsoluteForm(path) => {
+                if path
+                    .splitn(2, '/')
+                    // Skip the host portion
+                    .skip(1)
+                    .take(1)
+                    .collect::<String>()
+                    .is_empty()
+                {
+                    // Index page (E.G example.com/). Corrects example.com to example.com/
+                    Ok(HandlerPath("/".to_string()))
+                } else {
+                    Ok(HandlerPath(path.to_string()))
+                }
+            }
+        }
     }
 }
 
