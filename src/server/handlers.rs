@@ -180,7 +180,7 @@ mod tests {
             &self.method
         }
 
-        fn on_request(&mut self, _req: Request) -> Response {
+        fn on_request(&mut self, _req: &Request) -> Response {
             Response::new(
                 crate::server::response::ResponseStatus::OK,
                 HashMap::default(),
@@ -200,7 +200,7 @@ mod tests {
             &HTTPMethod::Connect
         }
 
-        fn on_request(&mut self, _req: Request) -> Response {
+        fn on_request(&mut self, _req: &Request) -> Response {
             todo!("No handler")
         }
     }
@@ -216,7 +216,7 @@ mod tests {
             &HTTPMethod::Trace
         }
 
-        fn on_request(&mut self, _req: Request) -> Response {
+        fn on_request(&mut self, _req: &Request) -> Response {
             todo!("No handler")
         }
     }
@@ -232,7 +232,7 @@ mod tests {
             &HTTPMethod::Options
         }
 
-        fn on_request(&mut self, _req: Request) -> Response {
+        fn on_request(&mut self, _req: &Request) -> Response {
             todo!("No handler")
         }
     }
