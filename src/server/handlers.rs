@@ -152,6 +152,8 @@ impl HandlerRegistry {
 
 #[cfg(test)]
 mod tests {
+    use crate::request::HTTPVersion;
+
     use super::*;
 
     struct HelloWorldHandler {
@@ -179,6 +181,7 @@ mod tests {
 
         fn on_request(&self, _req: &Request) -> Response {
             Response::new(
+                HTTPVersion::V1_1,
                 crate::server::response::ResponseStatus::OK,
                 HashMap::default(),
                 "Hello, world!".to_string(),
