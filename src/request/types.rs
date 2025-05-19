@@ -186,15 +186,15 @@ impl<'a> Request<'a> {
         }
     }
 
-    pub fn read_body_text(self) -> Result<String, RequestParseError> {
-        let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
+    pub fn read_body_text(&self) -> Result<String, RequestParseError> {
+        let mime_info = headers::content_type::parse_mime_info(&self.head.headers)?;
         self.body.text(&mime_info).map_err(|e| {
             RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
         })
     }
 
-    pub fn read_body_json(self) -> Result<Json, RequestParseError> {
-        let mime_info = headers::content_type::parse_mime_info(self.head.headers)?;
+    pub fn read_body_json(&self) -> Result<Json, RequestParseError> {
+        let mime_info = headers::content_type::parse_mime_info(&self.head.headers)?;
         self.body.json(&mime_info).map_err(|e| {
             RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
         })
