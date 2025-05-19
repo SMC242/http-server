@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::{borrow::Cow, fmt::Display};
 
-use crate::request::HTTPHeaders;
+use crate::request::{HTTPHeaders, HTTPVersion};
 
 // See https://stackoverflow.com/a/36928678
 // Generated from en.wikipedia.org/wiki/List_of_HTTP_status_codes
@@ -188,14 +188,21 @@ impl ResponseStatus {
 
 #[derive(Debug)]
 pub struct Response {
+    version: HTTPVersion,
     status: ResponseStatus,
     headers: HTTPHeaders,
     body: String,
 }
 
 impl Response {
-    pub fn new(status: ResponseStatus, headers: HTTPHeaders, body: String) -> Self {
+    pub fn new(
+        version: HTTPVersion,
+        status: ResponseStatus,
+        headers: HTTPHeaders,
+        body: String,
+    ) -> Self {
         Self {
+            version,
             status,
             headers,
             body,
@@ -206,6 +213,7 @@ impl Response {
 impl Default for Response {
     fn default() -> Self {
         Self {
+            version: HTTPVersion::V1_1,
             status: ResponseStatus::OK,
             headers: std::collections::HashMap::new(),
             body: String::new(),
