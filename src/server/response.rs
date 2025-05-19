@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::fmt::Write;
 use std::{borrow::Cow, fmt::Display};
 
 use crate::request::{HTTPHeaders, HTTPVersion};
@@ -218,5 +219,31 @@ impl Default for Response {
             headers: std::collections::HashMap::new(),
             body: String::new(),
         }
+    }
+}
+
+impl Display for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO: set Content-Length if not specified
+        //self.headers
+        //    .insert("Content-Length".to_string(), self.body.len().to_string());
+
+        let stringified_headers: String =
+            self.headers
+                .iter()
+                .fold(String::new(), |mut s, (key, value)| {
+                    let _ = write!(s, "{key}: {value}");
+                    s
+                });
+
+        write!(
+            f,
+            "{0} {1} {2}\n{3}\n\n{4}",
+            self.version,
+            self.status.to_code(),
+            self.status,
+            stringified_headers,
+            self.body
+        )
     }
 }
