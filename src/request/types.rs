@@ -148,6 +148,22 @@ impl FromStr for HTTPVersion {
     }
 }
 
+impl Display for HTTPVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{0}",
+            match self {
+                HTTPVersion::V0_9 => "HTTP/0.9",
+                HTTPVersion::V1_0 => "HTTP/1.0",
+                HTTPVersion::V1_1 => "HTTP/1.1",
+                HTTPVersion::V2 => "HTTP/2",
+                HTTPVersion::V3 => "HTTP/3",
+            }
+        )
+    }
+}
+
 impl std::fmt::Display for RequestParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prelude = "Failed to parse request.";
