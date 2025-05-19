@@ -54,6 +54,8 @@ impl Handler for DogStoreGetHandler {
     fn on_request(&self, _req: &Request) -> Response {
         let store = self.store.lock().unwrap();
         Response::new(
+            // FIXME: don't hardcode the HTTP version
+            crate::request::HTTPVersion::V1_1,
             ResponseStatus::OK,
             HashMap::from([
                 ("Content-Type".to_string(), "application/json".to_string()),
@@ -97,18 +99,25 @@ impl Handler for DogStorePostHandler {
                 let dog_name = body["name"].to_string();
                 if store.names.contains(&dog_name) {
                     Response::new(
+                        crate::request::HTTPVersion::V1_1,
                         ResponseStatus::Conflict,
                         HashMap::default(),
                         "Not added".to_string(),
                     )
                 } else {
                     store.add(&dog_name);
-                    Response::new(ResponseStatus::OK, HashMap::default(), "Added".to_string())
+                    Response::new(
+                        crate::request::HTTPVersion::V1_1,
+                        ResponseStatus::OK,
+                        HashMap::default(),
+                        "Added".to_string(),
+                    )
                 }
             }
             Err(e) => {
                 log::error!("{e}");
                 Response::new(
+                    crate::request::HTTPVersion::V1_1,
                     ResponseStatus::BadRequest,
                     HashMap::default(),
                     e.to_string(),
