@@ -104,7 +104,7 @@ fn parse_content_type(content_type: &str) -> Result<ContentTypeInfo, RequestPars
     })
 }
 
-pub fn parse_mime_info(headers: HTTPHeaders) -> Result<MimeParseInfo, RequestParseError> {
+pub fn parse_mime_info(headers: &HTTPHeaders) -> Result<MimeParseInfo, RequestParseError> {
     let content_length = headers
         .get("content-length")
         .ok_or(RequestParseError::BodyParseError(
@@ -159,31 +159,31 @@ mod tests {
     #[test]
     fn empty_headers() {
         let headers: HTTPHeaders = new_http_headers(&[]);
-        parse_mime_info(headers)
+        parse_mime_info(&headers)
             .expect_err("Attempting to parse the MIME info from empty headers should fail");
     }
 
     #[test]
     fn missing_headers() {
-        parse_mime_info(new_http_headers(&[("content-type", "application/json")]))
+        parse_mime_info(&new_http_headers(&[("content-type", "application/json")]))
             .expect_err("Parsing MIME info without a Content-Length should fail");
-        parse_mime_info(new_http_headers(&[("content-length", "0")]))
+        parse_mime_info(&new_http_headers(&[("content-length", "0")]))
             .expect_err("Parsing MIME info without a Content-Type should fail");
     }
 
     #[test]
     fn invalid_content_type() {
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", ""),
             ("content-length", "0"),
         ]))
         .expect_err("Parsing MIME info with an empty Content-Type should fail");
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", "application/fakesubtype"),
             ("content-length", "0"),
         ]))
         .expect_err("Parsing MIME info with a fake main MIME type should fail");
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", "fakemaintype/html"),
             ("content-length", "0"),
         ]))
@@ -192,19 +192,19 @@ mod tests {
 
     #[test]
     fn invalid_content_length() {
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", "text/html"),
             ("content-length", "-1"),
         ]))
         .expect_err("Parsing negative Content-Lengths should fail");
 
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", "text/html"),
             ("content-length", "afkajaffjej"),
         ]))
         .expect_err("Parsing string Content-Lengths should fail");
 
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", "text/html"),
             ("content-length", "6.0"),
         ]))
@@ -213,19 +213,19 @@ mod tests {
 
     #[test]
     fn varying_content_lengths() {
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", "text/html"),
             ("content-length", "1"),
         ]))
         .expect("Parsing Content-Length = 1 should succeed");
 
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", "text/html"),
             ("content-length", "128"),
         ]))
         .expect("Parsing Content-Length = 128 should succeed");
 
-        parse_mime_info(new_http_headers(&[
+        parse_mime_info(&new_http_headers(&[
             ("content-type", "text/html"),
             ("content-length", "4000000000"),
         ]))
@@ -239,7 +239,7 @@ mod tests {
             length,
             encoding,
             ..
-        } = parse_mime_info(new_http_headers(&[
+        } = parse_mime_info(&new_http_headers(&[
             ("content-type", "audio/ogg"),
             ("content-length", "1024"),
         ]))
@@ -269,7 +269,7 @@ mod tests {
             boundary,
             charset,
             ..
-        } = parse_mime_info(new_http_headers(&[
+        } = parse_mime_info(&new_http_headers(&[
             ("content-type", "multipart/form-data;boundaryString=---------------------------1003363413119651595289485765"),
             ("content-length", "1024"),
         ]))
@@ -302,7 +302,7 @@ mod tests {
             charset,
             boundary,
             ..
-        } = parse_mime_info(new_http_headers(&[
+        } = parse_mime_info(&new_http_headers(&[
             ("content-type", "text/html;charset=utf-8"),
             ("content-length", "1024"),
         ]))
@@ -333,7 +333,7 @@ mod tests {
             length,
             encoding,
             ..
-        } = parse_mime_info(new_http_headers(&[
+        } = parse_mime_info(&new_http_headers(&[
             ("content-type", "video/mp4"),
             ("content-length", "1024"),
             ("content-encoding", "compress")
@@ -361,7 +361,7 @@ mod tests {
             length,
             encoding,
             ..
-        } = parse_mime_info(new_http_headers(&[
+        } = parse_mime_info(&new_http_headers(&[
             ("content-type", "video/mp4"),
             ("content-length", "1024"),
             ("content-encoding", "compress,deflate, gzip"),
