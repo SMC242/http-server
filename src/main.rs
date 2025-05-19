@@ -1,8 +1,14 @@
 use log::{debug, info};
+use request::{HTTPHeaders, HTTPVersion};
+use server::handlers::{Handler, HandlerRegistry};
+use server::response::{Response, ResponseStatus};
 use std::io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write};
 use std::net::{Ipv4Addr, TcpStream};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+mod dog_crud_example;
+use dog_crud_example as dogstore;
 mod mime;
 mod request;
 mod server;
@@ -57,9 +63,34 @@ fn handle_connection(mut stream: TcpStream) -> std::io::Result<()> {
     info!(target: "listener", "Request received from {client_ip}: {req_head:?}");
 
     let request = request::Request::new(req_head, reader);
-    debug!("body of request: {0:?}", request.read_body_json());
 
-    stream.write_all(DEFAULT_RESPONSE.as_bytes())
+    let dog_store = Arc::new(Mutex::new(dogstore::DogStore::default()));
+    let handlers: Vec<Arc<dyn Handler>> = vec![
+        Arc::new(dogstore::DogStoreGetHandler::new(dog_store.clone())),
+        Arc::new(dogstore::DogStorePostHandler::new(dog_store.clone())),
+    ];
+
+    let handler_registry = HandlerRegistry::new(handlers);
+
+    let response = if let Ok(request_path) = request.head.path.clone().try_into() {
+        match handler_registry.get(request.head.method, request_path) {
+            Some(handler) => handler.on_request(&request),
+            None => Response::new(
+                HTTPVersion::V1_1,
+                ResponseStatus::NotFound,
+                HTTPHeaders::default(),
+                "No matching handler found".to_string(),
+            ),
+        }
+    } else {
+        Response::new(
+            HTTPVersion::V1_1,
+            ResponseStatus::BadRequest,
+            HTTPHeaders::default(),
+            "Malformed URL path".to_string(),
+        )
+    };
+    stream.write_all(response.to_string().as_bytes())
 }
 
 fn main() -> std::io::Result<()> {
