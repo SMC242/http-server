@@ -54,7 +54,7 @@ impl TryFrom<Path> for HandlerPath {
 pub trait Handler {
     fn get_path(&self) -> &HandlerPath;
     fn get_method(&self) -> &HTTPMethod;
-    fn on_request(&mut self, req: &Request) -> Response;
+    fn on_request(&self, req: &Request) -> Response;
 }
 
 /**
@@ -83,7 +83,7 @@ impl From<(HTTPMethod, String)> for HandlerRegistryKey {
 #[derive(Default)]
 pub struct HandlerRegistry {
     // TODO: figure out how to efficiently discriminate between HTTP methods
-    handlers: HashMap<HandlerRegistryKey, Arc<Mutex<dyn Handler>>>,
+    handlers: HashMap<HandlerRegistryKey, Arc<dyn Handler>>,
 }
 
 #[derive(Debug)]
@@ -101,29 +101,26 @@ pub enum HandlerCallError {
 }
 
 impl HandlerRegistry {
-    pub fn new(handlers: Vec<Arc<Mutex<dyn Handler>>>) -> Self {
+    pub fn new(handlers: Vec<Arc<dyn Handler>>) -> Self {
         let mut registry = HashMap::new();
         handlers.into_iter().for_each(|h| {
-            let key = { HandlerRegistryKey::from(&*h.lock().unwrap()) };
+            let key = { HandlerRegistryKey::from(h.as_ref()) };
             registry.entry(key).or_insert(h);
         });
         HandlerRegistry { handlers: registry }
     }
 
-    pub fn add(&mut self, handler: Arc<Mutex<dyn Handler>>) -> Result<(), HandlerRegistryAddError> {
-        let key = {
-            let h = handler.lock().unwrap();
-            if matches!(
-                h.get_method(),
-                HTTPMethod::Trace | HTTPMethod::Connect | HTTPMethod::Options
-            ) {
-                return Err(HandlerRegistryAddError::UnhandlableMethod(
-                    h.get_method().to_owned(),
-                ));
-            }
+    pub fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError> {
+        if matches!(
+            handler.get_method(),
+            HTTPMethod::Trace | HTTPMethod::Connect | HTTPMethod::Options
+        ) {
+            return Err(HandlerRegistryAddError::UnhandlableMethod(
+                handler.get_method().to_owned(),
+            ));
+        }
 
-            HandlerRegistryKey::from(&*h)
-        };
+        let key = HandlerRegistryKey::from(handler.as_ref());
 
         if let Entry::Vacant(e) = self.handlers.entry(key.clone()) {
             e.insert(handler);
@@ -133,7 +130,7 @@ impl HandlerRegistry {
         }
     }
 
-    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<Mutex<dyn Handler>>> {
+    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<dyn Handler>> {
         self.handlers
             .get(&HandlerRegistryKey::from((method, path.0)))
     }
@@ -148,7 +145,7 @@ impl HandlerRegistry {
             .try_into()
             .or(Err(HandlerCallError::UnhandlablePath(path.clone())))?;
         self.get(method, handler_path)
-            .map(|h| h.lock().unwrap().on_request(req))
+            .map(|h| h.on_request(req))
             .ok_or(HandlerCallError::NoCompatibleHandler(method, path.clone()))
     }
 }
@@ -180,7 +177,7 @@ mod tests {
             &self.method
         }
 
-        fn on_request(&mut self, _req: &Request) -> Response {
+        fn on_request(&self, _req: &Request) -> Response {
             Response::new(
                 crate::server::response::ResponseStatus::OK,
                 HashMap::default(),
@@ -200,7 +197,7 @@ mod tests {
             &HTTPMethod::Connect
         }
 
-        fn on_request(&mut self, _req: &Request) -> Response {
+        fn on_request(&self, _req: &Request) -> Response {
             todo!("No handler")
         }
     }
@@ -216,7 +213,7 @@ mod tests {
             &HTTPMethod::Trace
         }
 
-        fn on_request(&mut self, _req: &Request) -> Response {
+        fn on_request(&self, _req: &Request) -> Response {
             todo!("No handler")
         }
     }
@@ -232,7 +229,7 @@ mod tests {
             &HTTPMethod::Options
         }
 
-        fn on_request(&mut self, _req: &Request) -> Response {
+        fn on_request(&self, _req: &Request) -> Response {
             todo!("No handler")
         }
     }
@@ -244,30 +241,29 @@ mod tests {
         let mut registry: HandlerRegistry = HandlerRegistry::default();
 
         registry
-            .add(Arc::new(Mutex::new(handler)))
+            .add(Arc::new(handler))
             .expect("Adding a GET handler for / should succeed");
 
         let handler = registry
             .get(HTTPMethod::Get, HandlerPath::new("/"))
             .expect("A GET handler for / should be found");
-        let h = handler.lock().unwrap();
-        assert_eq!(*h.get_method(), HTTPMethod::Get);
-        assert_eq!(*h.get_path(), HandlerPath::new("/"))
+        assert_eq!(*handler.get_method(), HTTPMethod::Get);
+        assert_eq!(*handler.get_path(), HandlerPath::new("/"))
     }
 
     #[test]
     fn add_unhandlable() {
         let mut registry = HandlerRegistry::default();
         registry
-            .add(Arc::new(Mutex::new(ConnectHandler {})))
+            .add(Arc::new(ConnectHandler {}))
             .expect_err("Adding a handler for CONNECT should fail");
 
         registry
-            .add(Arc::new(Mutex::new(TraceHandler {})))
+            .add(Arc::new(TraceHandler {}))
             .expect_err("Adding a handler for TRACE should fail");
 
         registry
-            .add(Arc::new(Mutex::new(OptionsHandler {})))
+            .add(Arc::new(OptionsHandler {}))
             .expect_err("Adding a handler for OPTIONS should fail");
     }
 }
