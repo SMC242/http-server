@@ -90,7 +90,7 @@ impl Display for ResponseStatus {
             Self::MultiStatus => "Mutli-Status".to_string(),
             Self::Imateapot => "I'm A Teapot".to_string(),
             Self::NonStandard(code, name) => format!("{code} {name}"),
-            pascal_cased => unpascal_case(&pascal_cased.to_string()).to_string(),
+            pascal_cased => unpascal_case(&format!("{pascal_cased:?}")).to_string(),
         };
 
         write!(f, "{s}")
