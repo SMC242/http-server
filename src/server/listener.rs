@@ -1,4 +1,7 @@
-use crate::request::{self, http1_1, HTTPHeaders, HTTPVersion};
+use crate::{
+    request::{self, http1_1, HTTPHeaders, HTTPVersion},
+    server::handlers::HandlerCallError,
+};
 use std::{
     io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write},
     net::{IpAddr, TcpListener, TcpStream},
@@ -98,7 +101,24 @@ impl HTTPListener {
 
         let request = request::Request::new(request_head, reader);
 
-        let response = self.dispatch(request);
+        let response = match self.handler_registry.dispatch(&request) {
+            Ok(res) => res,
+            Err(HandlerCallError::UnhandlablePath(p)) => Response::new(
+                HTTPVersion::V1_1,
+                ResponseStatus::InternalServerError,
+                HTTPHeaders::default(),
+                format!(
+                    "Can't dispatch to path {0:?}. HTTP method: {1}",
+                    p, request.head.method
+                ),
+            ),
+            Err(HandlerCallError::NoCompatibleHandler(method, path)) => Response::new(
+                HTTPVersion::V1_1,
+                ResponseStatus::NotFound,
+                HTTPHeaders::default(),
+                format!("No handler for {0} to {1:?}", method, path),
+            ),
+        };
         stream.write_all(response.to_string().as_bytes())
     }
 
