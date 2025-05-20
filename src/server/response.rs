@@ -210,6 +210,16 @@ impl Response {
         }
     }
 
+    /// Convenience constructor that sets the version from the given request
+    pub fn from_request(
+        req: crate::request::Request,
+        status: ResponseStatus,
+        headers: HTTPHeaders,
+        body: String,
+    ) -> Self {
+        Response::new(req.head.version, status, headers, body)
+    }
+
     pub fn version(&self) -> HTTPVersion {
         self.version
     }
