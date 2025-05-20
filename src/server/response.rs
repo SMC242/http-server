@@ -209,6 +209,38 @@ impl Response {
             body,
         }
     }
+
+    pub fn version(&self) -> HTTPVersion {
+        self.version
+    }
+
+    pub fn status(&self) -> &ResponseStatus {
+        &self.status
+    }
+
+    pub fn headers(&self) -> &HTTPHeaders {
+        &self.headers
+    }
+
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
+    pub fn set_header(&mut self, k: String, v: String) -> Option<String> {
+        self.headers.insert(k.to_lowercase(), v)
+    }
+
+    pub fn get_header(&self, k: String) -> Option<String> {
+        self.headers.get(&k.to_lowercase()).cloned()
+    }
+
+    pub fn extend_headers(&mut self, headers: impl Iterator<Item = (String, String)>) {
+        self.headers.extend(headers)
+    }
+
+    pub fn upsert_header(&mut self, k: String, v: String) {
+        self.headers.entry(k.to_lowercase()).or_insert(v);
+    }
 }
 
 impl Default for Response {
