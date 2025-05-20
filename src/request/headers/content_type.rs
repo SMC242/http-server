@@ -443,4 +443,25 @@ mod tests {
             "Parameter order should not matter"
         );
     }
+
+    #[test]
+    fn malformed_content_type_param() {
+        parse_mime_info(&new_http_headers(&[
+            ("content-type", "multipart/form-data;"),
+            ("content-length", "1024"),
+        ]))
+        .expect_err("Parsing a Content-Type with a trailing semicolon should fail");
+
+        parse_mime_info(&new_http_headers(&[
+            ("content-type", "multipart/form-data; "),
+            ("content-length", "1024"),
+        ]))
+        .expect_err("Parsing a Content-Type with a trailing semicolon and space should fail");
+
+        parse_mime_info(&new_http_headers(&[
+            ("content-type", "multipart/form-data; charset="),
+            ("content-length", "1024"),
+        ]))
+        .expect_err("Parsing a Content-Type with an empty parameter should fail");
+    }
 }
