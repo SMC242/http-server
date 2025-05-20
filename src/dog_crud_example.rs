@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -11,7 +12,7 @@ use crate::{
     },
 };
 
-#[derive(Default)]
+#[derive(Default, Serialize)]
 pub struct DogStore {
     pub names: Vec<String>,
 }
@@ -19,10 +20,6 @@ pub struct DogStore {
 impl DogStore {
     pub fn add(&mut self, name: &str) {
         self.names.push(name.to_string())
-    }
-
-    pub fn to_json(&self) -> String {
-        format!("{{\"names\": {0:?}}}", self.names)
     }
 }
 
@@ -53,7 +50,7 @@ impl Handler for DogStoreGetHandler {
 
     fn on_request(&self, _req: &Request) -> Response {
         let store = self.store.lock().unwrap();
-        let jsonified = store.to_json();
+        let jsonified = serde_json::to_string(&*store).expect("DogStore should be serialisable");
 
         Response::new(
             // FIXME: don't hardcode the HTTP version
