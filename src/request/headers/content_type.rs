@@ -381,4 +381,66 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn with_charset_and_encoding() {
+        let MimeParseInfo {
+            content_type,
+            charset,
+            boundary,
+            ..
+        } = parse_mime_info(&new_http_headers(&[
+            (
+                "content-type",
+                "multipart/form-data; charset=UTF-8; boundaryString=aba",
+            ),
+            ("content-length", "1024"),
+        ]))
+        .expect("Parsing a Content-Type with a boundaryString and charset should succeed");
+        assert_eq!(
+            content_type,
+            MimeType {
+                main_type: MainMimeType::Multipart,
+                sub_type: SubMimeType::FormData,
+                original: "multipart/form-data".to_string()
+            },
+            "Should be multipart/form-data"
+        );
+        assert_eq!(charset, Some("UTF-8".to_string()));
+        assert_eq!(boundary, Some("aba".to_string()));
+
+        // test order
+        let MimeParseInfo {
+            content_type,
+            charset,
+            boundary,
+            ..
+        } = parse_mime_info(&new_http_headers(&[
+            (
+                "content-type",
+                "multipart/form-data; boundaryString=aba; charset=UTF-8",
+            ),
+            ("content-length", "1024"),
+        ]))
+        .expect("Parsing a Content-Type with a boundaryString and charset should succeed");
+        assert_eq!(
+            content_type,
+            MimeType {
+                main_type: MainMimeType::Multipart,
+                sub_type: SubMimeType::FormData,
+                original: "multipart/form-data".to_string()
+            },
+            "Should be multipart/form-data"
+        );
+        assert_eq!(
+            charset,
+            Some("UTF-8".to_string()),
+            "Parameter order should not matter"
+        );
+        assert_eq!(
+            boundary,
+            Some("aba".to_string()),
+            "Parameter order should not matter"
+        );
+    }
 }
