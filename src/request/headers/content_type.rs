@@ -56,46 +56,41 @@ pub fn parse_content_encoding(s: &str) -> Result<Vec<ContentEncoding>, RequestPa
 }
 
 fn parse_content_type(content_type: &str) -> Result<ContentTypeInfo, RequestParseError> {
-    let mut chars = content_type.chars().peekable();
-    let media_type: String = chars.by_ref().take_while(|c| ';' != *c).collect();
-    let mime_type = MimeType::from_str(media_type.as_str()).map_err(|_| {
+    let mut parts = content_type.split(';').peekable();
+    let media_type = if let Some(mt) = parts.next() {
+        mt
+    } else {
+        content_type
+    };
+    let mime_type = MimeType::from_str(media_type).map_err(|_| {
         RequestParseError::InvalidHeader(format!("Invalid or unsupported MIME type {media_type}"))
     })?;
 
-    // Parse parameters if they exist
-    if chars.peek().is_none() {
-        return Ok(ContentTypeInfo {
-            content_type: mime_type,
-            charset: None,
-            boundary: None,
-        });
+    let (mut charset, mut boundary) = (None, None);
+    for param in parts {
+        let param_parts: Vec<&str> = param.split('=').collect();
+        if param_parts.len() != 2 {
+            return Err(RequestParseError::InvalidHeader(
+                "Malformed parameter in Content-Type header".to_string(),
+            ));
+        }
+        match param_parts[0].trim() {
+            "boundaryString" => boundary = Some(param_parts[1].to_string()),
+            "charset" => charset = Some(param_parts[1].to_string()),
+            other_param => {
+                return Err(RequestParseError::InvalidHeader(format!(
+                    "Unexpected parameter: '{other_param}'"
+                )))
+            }
+        }
     }
 
-    let param_name: String = chars.by_ref().take_while(|c| '=' != *c).collect();
-    // `boundaryString` and `charset` are mutually exclusive
-    let (boundary, charset): (Option<String>, Option<String>) = match param_name.as_str() {
-        "" => {
-            return Err(RequestParseError::InvalidHeader(
-                "Unexpected ';' in Content-Type header. ';'".to_string()
-                    + " must be followed by either charset=... or boundaryString=...",
-            ))
-        }
-        "boundaryString" => {
-            if !matches!(mime_type.main_type, MainMimeType::Multipart) {
-                return Err(RequestParseError::BodyParseError(format!(
-                    "boundaryString is required for multipart/* MIME types. MIME type: {0}",
-                    mime_type.original
-                )));
-            }
-            (Some(chars.collect()), None)
-        }
-        "charset" => (None, Some(chars.collect())),
-        other_param => {
-            return Err(RequestParseError::InvalidHeader(format!(
-                "Unexpected parameter: '{other_param}'"
-            )))
-        }
-    };
+    if matches!(mime_type.main_type, MainMimeType::Multipart) && boundary.is_none() {
+        return Err(RequestParseError::BodyParseError(format!(
+            "boundaryString is required for multipart/* MIME types. MIME type: {0}",
+            mime_type.original
+        )));
+    }
 
     Ok(ContentTypeInfo {
         content_type: mime_type,
