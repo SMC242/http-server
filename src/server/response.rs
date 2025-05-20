@@ -256,26 +256,52 @@ impl Default for Response {
 
 impl Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: set Content-Length if not specified
-        //self.headers
-        //    .insert("Content-Length".to_string(), self.body.len().to_string());
-
-        let stringified_headers: String =
-            self.headers
-                .iter()
-                .fold(String::new(), |mut s, (key, value)| {
-                    let _ = write!(s, "{key}: {value}");
-                    s
-                });
-
         write!(
             f,
-            "{0} {1} {2}\n{3}\n\n{4}",
-            self.version,
-            self.status.to_code(),
-            self.status,
-            stringified_headers,
-            self.body
+            "{}",
+            match self.version() {
+                HTTPVersion::V0_9 => format_http0_9(self).to_owned(),
+                HTTPVersion::V1_0 | HTTPVersion::V1_1 => format_http1_x(self),
+                other =>
+                    panic!("Formatting responses for HTTP version {other} is not yet supported"),
+            }
         )
     }
+}
+
+pub fn ensure_headers(res: &mut Response) {
+    res.upsert_header("Content-Length".to_string(), res.body.len().to_string());
+
+    // Set character encoding if required
+    if !res.body.is_empty() {
+        if let Some(ct) = res.get_header("Content-Type".to_string()) {
+            if !ct.contains("charset") {
+                res.set_header("Content-Type".to_string(), ct + "; charset=UTF-8");
+            }
+        };
+    }
+}
+
+// Format for HTTP 1.1
+pub fn format_http0_9(res: &Response) -> &String {
+    &res.body
+}
+
+pub fn format_http1_x(res: &Response) -> String {
+    let stringified_headers: String =
+        res.headers
+            .iter()
+            .fold(String::new(), |mut s, (key, value)| {
+                let _ = write!(s, "{key}: {value}");
+                s
+            });
+
+    format!(
+        "{0} {1} {2}\n{3}\n\n{4}",
+        res.version,
+        res.status.to_code(),
+        res.status,
+        stringified_headers,
+        res.body
+    )
 }
