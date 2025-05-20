@@ -82,7 +82,7 @@ impl HTTPListener {
         info!(target: "listener", "Connection received from {client_ip}");
 
         info!(target: "listener", "Configuring connection for {client_ip}");
-        self.configure_connection(stream);
+        self.configure_connection(stream)?;
 
         let (request_content, reader) = self.read_message(stream)?;
         info!(target: "listener", "Parsing message from {client_ip} as HTTP request");
