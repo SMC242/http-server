@@ -53,15 +53,17 @@ impl Handler for DogStoreGetHandler {
 
     fn on_request(&self, _req: &Request) -> Response {
         let store = self.store.lock().unwrap();
+        let jsonified = store.to_json();
+
         Response::new(
             // FIXME: don't hardcode the HTTP version
             crate::request::HTTPVersion::V1_1,
             ResponseStatus::OK,
             HashMap::from([
                 ("Content-Type".to_string(), "application/json".to_string()),
-                ("Content-Length".to_string(), "30".to_string()),
+                ("Content-Length".to_string(), jsonified.len().to_string()),
             ]),
-            store.to_json(),
+            jsonified,
         )
     }
 }
