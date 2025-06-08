@@ -100,9 +100,11 @@ pub enum HandlerCallError {
     NoCompatibleHandler(HTTPMethod, Path),
 }
 
-pub trait RequestDispatcher<E> {
+pub trait RequestDispatcher {
+    type Error;
+
     fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError>;
-    fn dispatch(&self, request: &Request) -> Result<Response, E>;
+    fn dispatch(&self, request: &Request) -> Result<Response, Self::Error>;
 }
 
 impl HandlerRegistry {
@@ -121,7 +123,9 @@ impl HandlerRegistry {
     }
 }
 
-impl RequestDispatcher<HandlerCallError> for HandlerRegistry {
+impl RequestDispatcher for HandlerRegistry {
+    type Error = HandlerCallError;
+
     fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError> {
         if matches!(
             handler.get_method(),
