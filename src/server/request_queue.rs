@@ -40,7 +40,7 @@ impl RequestQueue {
         dispatcher: D,
         opts: RequestQueueOptions,
     ) -> Self {
-        let req_queue = Arc::new(SynchronisedQueue::new());
+        let req_queue = Arc::new(SynchronisedQueue::with_capacity(opts.n_threads));
         let wrapped_dispatcher = Arc::new(dispatcher);
 
         let mut threads = Vec::new();
