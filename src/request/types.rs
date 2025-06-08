@@ -5,6 +5,7 @@ use std::{
     fmt::Display,
     io::{BufReader, Read},
     str::FromStr,
+    sync::Arc,
 };
 
 /// An arbitrary JSON
@@ -44,13 +45,14 @@ pub struct RequestHead {
 
 pub type RequestBody = Option<String>;
 
-pub struct Request<'a> {
+pub struct Request {
     pub head: RequestHead,
     // NOTE: calls to to read the body should be infrequent enough that the
     // cost of a v-table is insignificant. Realistically, the body will only be read once per
     // request
     // TODO: test what happens if multiple handlers read the body
-    body: Box<dyn BodyReader + 'a>,
+    // FIXME: create a wrapper that stores the body once read
+    body: Arc<dyn BodyReader + Send + Sync + 'static>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -182,8 +184,8 @@ impl std::fmt::Display for RequestParseError {
     }
 }
 
-impl<'a> Request<'a> {
-    pub fn new<R: Read + 'a>(head: RequestHead, reader: BufReader<R>) -> Self {
+impl Request {
+    pub fn new<R: Read + Send + Sync + 'static>(head: RequestHead, reader: BufReader<R>) -> Self {
         let reader_wrapper = match head.version {
             HTTPVersion::V1_1 | HTTPVersion::V0_9 | HTTPVersion::V1_0 => {
                 HTTP1_1BodyReader::new(reader)
@@ -198,7 +200,7 @@ impl<'a> Request<'a> {
 
         Self {
             head,
-            body: Box::new(reader_wrapper),
+            body: Arc::new(reader_wrapper),
         }
     }
 

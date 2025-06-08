@@ -12,7 +12,7 @@ pub fn decode_body(encoding: &[ContentEncoding], body: Vec<u8>) -> Result<String
     String::from_utf8(body).or(Err("Failed to decode bytes as UTF-8"))
 }
 
-pub struct HTTP1_1BodyReader<R: Read> {
+pub struct HTTP1_1BodyReader<R: Read + Send + Sync> {
     stream: Arc<Mutex<BufReader<R>>>,
 }
 
@@ -32,14 +32,14 @@ fn read_body<Stream: Read>(length: u64, reader: &mut BufReader<Stream>) -> Resul
     }
 }
 
-impl<R: Read> HTTP1_1BodyReader<R> {
+impl<R: Read + Send + Sync> HTTP1_1BodyReader<R> {
     pub fn new(reader: BufReader<R>) -> Self {
         Self {
             stream: Arc::new(Mutex::new(reader)),
         }
     }
 }
-impl<R: Read> BodyReader for HTTP1_1BodyReader<R> {
+impl<R: Read + Send + Sync> BodyReader for HTTP1_1BodyReader<R> {
     fn text(&self, parse_info: &MimeParseInfo) -> Result<String, String> {
         if !matches!(
             parse_info.content_type,
