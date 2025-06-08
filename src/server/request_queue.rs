@@ -86,6 +86,13 @@ impl<T: Send> SynchronisedQueue<T> {
         }
     }
 
+    pub fn with_capacity(size: usize) -> Self {
+        Self {
+            signal: Condvar::new(),
+            data: Mutex::new(VecDeque::with_capacity(size)),
+        }
+    }
+
     pub fn push(&self, x: T) {
         let mut data = self.data.lock().unwrap();
         data.push_back(x);
