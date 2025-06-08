@@ -1,6 +1,6 @@
 use crate::{
     request::{self, http1_1, HTTPHeaders, HTTPVersion},
-    server::handlers::HandlerCallError,
+    server::handlers::{HandlerCallError, RequestDispatcher},
 };
 use std::{
     io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write},

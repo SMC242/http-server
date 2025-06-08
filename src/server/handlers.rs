@@ -100,6 +100,11 @@ pub enum HandlerCallError {
     NoCompatibleHandler(HTTPMethod, Path),
 }
 
+pub trait RequestDispatcher<E> {
+    fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError>;
+    fn dispatch(&self, request: &Request) -> Result<Response, E>;
+}
+
 impl HandlerRegistry {
     pub fn new(handlers: Vec<Arc<dyn Handler>>) -> Self {
         let mut registry = HashMap::new();
@@ -110,7 +115,14 @@ impl HandlerRegistry {
         HandlerRegistry { handlers: registry }
     }
 
-    pub fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError> {
+    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<dyn Handler>> {
+        self.handlers
+            .get(&HandlerRegistryKey::from((method, path.0)))
+    }
+}
+
+impl RequestDispatcher<HandlerCallError> for HandlerRegistry {
+    fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError> {
         if matches!(
             handler.get_method(),
             HTTPMethod::Trace | HTTPMethod::Connect | HTTPMethod::Options
@@ -130,12 +142,7 @@ impl HandlerRegistry {
         }
     }
 
-    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<dyn Handler>> {
-        self.handlers
-            .get(&HandlerRegistryKey::from((method, path.0)))
-    }
-
-    pub fn dispatch(&self, req: &Request) -> Result<Response, HandlerCallError> {
+    fn dispatch(&self, req: &Request) -> Result<Response, HandlerCallError> {
         let RequestHead {
             method, ref path, ..
         } = req.head;
