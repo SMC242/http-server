@@ -57,12 +57,24 @@ pub trait Handler {
     fn on_request(&self, req: &Request) -> Response;
 }
 
+type SyncableHandler = dyn Handler + Send + Sync;
+
 /**
    A composite key from a handler. This is necessary because paths can be reused for
    different HTTP verbs
 */
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 struct HandlerRegistryKey(String);
+
+impl From<&SyncableHandler> for HandlerRegistryKey {
+    fn from(handler: &SyncableHandler) -> Self {
+        Self(format!(
+            "{0}{KEY_DELIMITER}{1}",
+            handler.get_method(),
+            handler.get_path().0
+        ))
+    }
+}
 
 impl From<&dyn Handler> for HandlerRegistryKey {
     fn from(handler: &dyn Handler) -> Self {
@@ -83,7 +95,7 @@ impl From<(HTTPMethod, String)> for HandlerRegistryKey {
 #[derive(Default)]
 pub struct HandlerRegistry {
     // TODO: figure out how to efficiently discriminate between HTTP methods
-    handlers: HashMap<HandlerRegistryKey, Arc<dyn Handler>>,
+    handlers: HashMap<HandlerRegistryKey, Arc<SyncableHandler>>,
 }
 
 #[derive(Debug)]
@@ -103,12 +115,12 @@ pub enum HandlerCallError {
 pub trait RequestDispatcher {
     type Error;
 
-    fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError>;
+    fn add(&mut self, handler: Arc<SyncableHandler>) -> Result<(), HandlerRegistryAddError>;
     fn dispatch(&self, request: &Request) -> Result<Response, Self::Error>;
 }
 
 impl HandlerRegistry {
-    pub fn new(handlers: Vec<Arc<dyn Handler>>) -> Self {
+    pub fn new(handlers: Vec<Arc<SyncableHandler>>) -> Self {
         let mut registry = HashMap::new();
         handlers.into_iter().for_each(|h| {
             let key = { HandlerRegistryKey::from(h.as_ref()) };
@@ -117,7 +129,7 @@ impl HandlerRegistry {
         HandlerRegistry { handlers: registry }
     }
 
-    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<dyn Handler>> {
+    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<SyncableHandler>> {
         self.handlers
             .get(&HandlerRegistryKey::from((method, path.0)))
     }
@@ -126,7 +138,7 @@ impl HandlerRegistry {
 impl RequestDispatcher for HandlerRegistry {
     type Error = HandlerCallError;
 
-    fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError> {
+    fn add(&mut self, handler: Arc<SyncableHandler>) -> Result<(), HandlerRegistryAddError> {
         if matches!(
             handler.get_method(),
             HTTPMethod::Trace | HTTPMethod::Connect | HTTPMethod::Options

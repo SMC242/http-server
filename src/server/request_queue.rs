@@ -1,5 +1,6 @@
 use std::{
     collections::VecDeque,
+    io::Error as IoError,
     sync::{Arc, Condvar, Mutex},
     thread,
     time::Duration,
@@ -7,7 +8,7 @@ use std::{
 
 use crate::request::Request;
 
-use super::handlers::{HandlerCallError, HandlerRegistry, RequestDispatcher};
+use super::handlers::RequestDispatcher;
 
 pub struct RequestQueueOptions {
     n_threads: usize,
@@ -24,6 +25,36 @@ impl Default for RequestQueueOptions {
     }
 }
 
+pub trait ThreadPool<I, O, F>
+where
+    I: Send + Sync,
+    O: Send + Sync,
+    F: Fn(I) -> O + Send + Sync + 'static,
+{
+    fn enqueue(&mut self, to_process: I);
+
+    fn spawn_all(
+        &mut self,
+        mut callback: F,
+        work: Arc<SynchronisedQueue<I>>,
+        n_threads: usize,
+        timeout: Duration,
+    ) -> Result<Vec<thread::JoinHandle<()>>, IoError> {
+        let mut threads = Vec::with_capacity(n_threads);
+        for _ in 0..n_threads {
+            let work_ref = Arc::clone(&work);
+            let th = thread::Builder::new().spawn(move || loop {
+                let job = work_ref.pop();
+                callback(job);
+            });
+
+            threads.push(th?);
+        }
+
+        Ok(threads)
+    }
+}
+
 pub struct RequestQueue {
     threads: Vec<thread::JoinHandle<()>>,
     timeout: Duration,
@@ -37,21 +68,21 @@ pub struct RequestQueue {
 
 impl RequestQueue {
     pub fn new<D: RequestDispatcher + Send + Sync + 'static>(
-        dispatcher: D,
+        dispatcher: Arc<D>,
         opts: RequestQueueOptions,
     ) -> Self {
         let req_queue = Arc::new(SynchronisedQueue::with_capacity(opts.n_threads));
-        let wrapped_dispatcher = Arc::new(dispatcher);
 
         let mut threads = Vec::new();
         for _ in 0..opts.n_threads {
             let queue_ref = Arc::clone(&req_queue);
-            let dispatcher_ref = Arc::clone(&wrapped_dispatcher);
+            let dispatcher_ref = Arc::clone(&dispatcher);
             let t = thread::spawn(move || loop {
                 let req = queue_ref.pop();
                 match dispatcher_ref.dispatch(&req) {
                     Ok(res) => {
                         // TODO: pass on response to response queue,
+                        println!("Response generated: {res:?}");
                     }
                     Err(e) => {
                         // TODO: pass to error handler function to generate the correct

@@ -5,6 +5,7 @@ use crate::{
 use std::{
     io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write},
     net::{IpAddr, TcpListener, TcpStream},
+    sync::Arc,
 };
 
 use log::info;
@@ -13,6 +14,7 @@ use crate::request::{Request, RequestParseError};
 
 use super::{
     handlers::HandlerRegistry,
+    request_queue::{RequestQueue, RequestQueueOptions},
     response::{Response, ResponseStatus},
 };
 
@@ -52,7 +54,8 @@ impl Default for ListenerConfig {
 pub struct HTTPListener {
     ip: IpAddr,
     port: u16,
-    handler_registry: HandlerRegistry,
+    handler_registry: Arc<HandlerRegistry>,
+    request_queue: RequestQueue,
     config: ListenerConfig,
 }
 
@@ -63,21 +66,25 @@ impl HTTPListener {
         handler_registry: HandlerRegistry,
         config: ListenerConfig,
     ) -> Self {
+        let registry = Arc::new(handler_registry);
+        let request_queue = RequestQueue::new(registry.clone(), RequestQueueOptions::default());
+
         Self {
             ip,
             port,
-            handler_registry,
+            handler_registry: registry,
             config,
+            request_queue,
         }
     }
 
-    pub fn listen(&self) -> std::io::Result<()> {
+    pub fn listen(&mut self) -> std::io::Result<()> {
         listen(self.ip, self.port, |mut conn| {
             self.handle_connection(&mut conn)
         })
     }
 
-    fn handle_connection(&self, stream: &mut TcpStream) -> Result<(), IoError> {
+    fn handle_connection(&mut self, stream: &mut TcpStream) -> Result<(), IoError> {
         let client_ip: String = stream
             .peer_addr()
             .map(|addr| addr.to_string())
@@ -101,25 +108,27 @@ impl HTTPListener {
 
         let request = request::Request::new(request_head, reader);
 
-        let response = match self.handler_registry.dispatch(&request) {
-            Ok(res) => res,
-            Err(HandlerCallError::UnhandlablePath(p)) => Response::new(
-                HTTPVersion::V1_1,
-                ResponseStatus::InternalServerError,
-                HTTPHeaders::default(),
-                format!(
-                    "Can't dispatch to path {0:?}. HTTP method: {1}",
-                    p, request.head.method
-                ),
-            ),
-            Err(HandlerCallError::NoCompatibleHandler(method, path)) => Response::new(
-                HTTPVersion::V1_1,
-                ResponseStatus::NotFound,
-                HTTPHeaders::default(),
-                format!("No handler for {0} to {1:?}", method, path),
-            ),
-        };
-        stream.write_all(response.to_string().as_bytes())
+        self.request_queue.enqueue(request);
+        //let response = match self.handler_registry.dispatch(&request) {
+        //    Ok(res) => res,
+        //    Err(HandlerCallError::UnhandlablePath(p)) => Response::new(
+        //        HTTPVersion::V1_1,
+        //        ResponseStatus::InternalServerError,
+        //        HTTPHeaders::default(),
+        //        format!(
+        //            "Can't dispatch to path {0:?}. HTTP method: {1}",
+        //            p, request.head.method
+        //        ),
+        //    ),
+        //    Err(HandlerCallError::NoCompatibleHandler(method, path)) => Response::new(
+        //        HTTPVersion::V1_1,
+        //        ResponseStatus::NotFound,
+        //        HTTPHeaders::default(),
+        //        format!("No handler for {0} to {1:?}", method, path),
+        //    ),
+        //};
+
+        stream.write_all("Hello, world!".to_string().as_bytes())
     }
 
     fn configure_connection(&self, conn: &TcpStream) -> Result<(), IoError> {
