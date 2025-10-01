@@ -3,17 +3,20 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::mime::{MainMimeType, MimeType, SubMimeType};
 use crate::request::content_type::{ContentEncoding, MimeParseInfo};
 use crate::request::types::{BodyReader, Json};
+use crate::{
+    mime::{MainMimeType, MimeType, SubMimeType},
+    request::SyncableStream,
+};
 
 pub fn decode_body(encoding: &[ContentEncoding], body: Vec<u8>) -> Result<String, &'static str> {
     // TODO: Use flate2 and rust-brotli to decode the body
     String::from_utf8(body).or(Err("Failed to decode bytes as UTF-8"))
 }
 
-pub struct HTTP1_1BodyReader<R: Read + Send + Sync> {
-    stream: Arc<Mutex<BufReader<R>>>,
+pub struct HTTP1_1BodyReader<R: SyncableStream> {
+    stream: BufReader<R>,
 }
 
 fn read_body<Stream: Read>(length: u64, reader: &mut BufReader<Stream>) -> Result<Vec<u8>, String> {
@@ -32,15 +35,13 @@ fn read_body<Stream: Read>(length: u64, reader: &mut BufReader<Stream>) -> Resul
     }
 }
 
-impl<R: Read + Send + Sync> HTTP1_1BodyReader<R> {
+impl<R: SyncableStream> HTTP1_1BodyReader<R> {
     pub fn new(reader: BufReader<R>) -> Self {
-        Self {
-            stream: Arc::new(Mutex::new(reader)),
-        }
+        Self { stream: reader }
     }
 }
-impl<R: Read + Send + Sync> BodyReader for HTTP1_1BodyReader<R> {
-    fn text(&self, parse_info: &MimeParseInfo) -> Result<String, String> {
+impl<R: SyncableStream> BodyReader for HTTP1_1BodyReader<R> {
+    fn text(&mut self, parse_info: &MimeParseInfo) -> Result<String, String> {
         if !matches!(
             parse_info.content_type,
             MimeType {
@@ -51,12 +52,11 @@ impl<R: Read + Send + Sync> BodyReader for HTTP1_1BodyReader<R> {
             return Err("Not a text document".to_string());
         }
 
-        let mut reader = self.stream.lock().unwrap();
-        let bytes = read_body(parse_info.length, &mut *reader)?;
+        let bytes = read_body(parse_info.length, &mut self.stream)?;
         decode_body(&parse_info.encoding, bytes).map_err(|e| e.to_string())
     }
 
-    fn json(&self, parse_info: &MimeParseInfo) -> Result<Json, String> {
+    fn json(&mut self, parse_info: &MimeParseInfo) -> Result<Json, String> {
         if !matches!(
             parse_info.content_type,
             MimeType {
@@ -69,23 +69,32 @@ impl<R: Read + Send + Sync> BodyReader for HTTP1_1BodyReader<R> {
         }
 
         // FIXME: this assumes that the charset is UTF-8. Use encoding_rs to decode first
-        let mut reader = self.stream.lock().unwrap();
-        let content_bytes = read_body(parse_info.length, &mut *reader)?;
+        let content_bytes = read_body(parse_info.length, &mut self.stream)?;
         let content: String = decode_body(&parse_info.encoding, content_bytes)?;
 
         serde_json::from_str::<Json>(content.as_str())
             .map_err(|reason| format!("Failed to decode JSON because: '{reason}'"))
     }
+
+    fn into_stream(self: Box<Self>) -> Box<dyn crate::request::SyncableStream> {
+        Box::new(self.stream.into_inner())
+    }
 }
 
 // TODO: multipart parser
-fn mock_stream(content: &'static str) -> Arc<Mutex<BufReader<Cursor<Vec<u8>>>>> {
-    Arc::new(Mutex::new(BufReader::new(Cursor::new(content.into()))))
+fn mock_stream(content: &'static str) -> Box<BufReader<Cursor<Vec<u8>>>> {
+    Box::new(BufReader::new(Cursor::new(content.into())))
 }
 
 #[cfg(test)]
 mod json_tests {
     use super::*;
+
+    impl SyncableStream for Cursor<Vec<u8>> {
+        fn get_type(&self) -> crate::request::SyncableStreamType {
+            crate::request::SyncableStreamType::Tcp
+        }
+    }
 
     #[test]
     fn parse_json_plaintext() {
@@ -102,7 +111,7 @@ mod json_tests {
         };
 
         HTTP1_1BodyReader {
-            stream: mock_stream(r#"{"foo":"bar"}"#),
+            stream: *mock_stream(r#"{"foo":"bar"}"#),
         }
         .json(&mime_info)
         .expect("Parsing the body should succeed");
@@ -123,7 +132,7 @@ mod json_tests {
         };
 
         HTTP1_1BodyReader {
-            stream: mock_stream(
+            stream: *mock_stream(
                 r#"{
   "foo": "bar",
   "baz": "qux"
@@ -149,7 +158,7 @@ mod json_tests {
         };
 
         HTTP1_1BodyReader {
-            stream: mock_stream(r#"{"foo":"bar"}"#),
+            stream: *mock_stream(r#"{"foo":"bar"}"#),
         }
         .json(&mime_info)
         .expect_err("An error should be thrown when the Content-Length is wrong");
@@ -170,7 +179,7 @@ mod json_tests {
         };
 
         HTTP1_1BodyReader {
-            stream: mock_stream("lol"),
+            stream: *mock_stream("lol"),
         }
         .json(&incorrect_mime_info)
         .expect_err("Calling parse_body_json when the MIME type is not JSON should fail");
@@ -188,7 +197,7 @@ mod json_tests {
         };
 
         HTTP1_1BodyReader {
-            stream: mock_stream(r#"not a json"#),
+            stream: *mock_stream(r#"not a json"#),
         }
         .json(&correct_mime_info)
         .expect_err("Parsing a body that is not JSON as JSON should fail");
@@ -209,7 +218,7 @@ mod json_tests {
         };
 
         HTTP1_1BodyReader {
-            stream: mock_stream(r#""#),
+            stream: *mock_stream(r#""#),
         }
         .json(&mime_info)
         .expect_err("Parsing an empty body as JSON should fail");
@@ -234,7 +243,7 @@ mod text_tests {
             encoding: vec![],
         };
         let result = HTTP1_1BodyReader {
-            stream: mock_stream(r#"<!doctype html><title>a</title>"#),
+            stream: *mock_stream(r#"<!doctype html><title>a</title>"#),
         }
         .text(&mime_info)
         .expect("Parsing a basic HTML document should succeed");
@@ -256,7 +265,7 @@ mod text_tests {
         };
 
         let result = HTTP1_1BodyReader {
-            stream: mock_stream(r#""#),
+            stream: *mock_stream(r#""#),
         }
         .text(&mime_info)
         .expect("Parsing an empty HTML document should succeed");
@@ -278,7 +287,7 @@ mod text_tests {
         };
 
         HTTP1_1BodyReader {
-            stream: mock_stream(r#"IDK what an .mp3 file looks like"#),
+            stream: *mock_stream(r#"IDK what an .mp3 file looks like"#),
         }
         .text(&mime_info)
         .expect_err("Parsing a non-text document should fail");

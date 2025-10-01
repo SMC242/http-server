@@ -7,8 +7,9 @@ use std::{
 use crate::{
     request::{HTTPMethod, Request},
     server::{
-        handlers::{Handler, HandlerPath},
-        response::{Response, ResponseStatus},
+        self,
+        handlers::{Handler, HandlerPath, HandlerResult},
+        response::{Response, ResponseBuilder, ResponseStatus},
     },
 };
 
@@ -48,19 +49,20 @@ impl Handler for DogStoreGetHandler {
         &self.method
     }
 
-    fn on_request(&self, _req: &Request) -> Response {
+    fn on_request(&self, req: Request) -> HandlerResult {
         let store = self.store.lock().unwrap();
         let jsonified = serde_json::to_string(&*store).expect("DogStore should be serialisable");
 
-        Response::new(
-            // FIXME: don't hardcode the HTTP version
-            crate::request::HTTPVersion::V1_1,
-            ResponseStatus::OK,
-            HashMap::from([
-                ("Content-Type".to_string(), "application/json".to_string()),
-                ("Content-Length".to_string(), jsonified.len().to_string()),
-            ]),
-            jsonified,
+        HandlerResult::Done(
+            ResponseBuilder::from(req)
+                .ok()
+                .headers(HashMap::from([
+                    ("Content-Type".to_string(), "application/json".to_string()),
+                    ("Content-Length".to_string(), jsonified.len().to_string()),
+                ]))
+                .body(jsonified)
+                .build()
+                .expect("A valid response should be created"),
         )
     }
 }
@@ -90,36 +92,39 @@ impl Handler for DogStorePostHandler {
         &self.method
     }
 
-    fn on_request(&self, req: &Request) -> Response {
+    fn on_request(&self, mut req: Request) -> HandlerResult {
         let mut store = self.store.lock().unwrap();
 
         match req.read_body_json() {
             Ok(body) => {
                 let dog_name = body["name"].to_string();
                 if store.names.contains(&dog_name) {
-                    Response::new(
-                        crate::request::HTTPVersion::V1_1,
-                        ResponseStatus::Conflict,
-                        HashMap::default(),
-                        "Not added".to_string(),
+                    HandlerResult::Done(
+                        ResponseBuilder::from(req)
+                            .status(ResponseStatus::Conflict)
+                            .body("Not added".to_string())
+                            .build()
+                            .expect("A valid 409 response should be produced"),
                     )
                 } else {
                     store.add(&dog_name);
-                    Response::new(
-                        crate::request::HTTPVersion::V1_1,
-                        ResponseStatus::OK,
-                        HashMap::default(),
-                        "Added".to_string(),
+                    HandlerResult::Done(
+                        ResponseBuilder::from(req)
+                            .ok()
+                            .body("Added".to_string())
+                            .build()
+                            .expect("A valid 200 response should be produced"),
                     )
                 }
             }
             Err(e) => {
                 log::error!("{e}");
-                Response::new(
-                    crate::request::HTTPVersion::V1_1,
-                    ResponseStatus::BadRequest,
-                    HashMap::default(),
-                    e.to_string(),
+                HandlerResult::Done(
+                    ResponseBuilder::from(req)
+                        .bad_request()
+                        .body(e.to_string())
+                        .build()
+                        .expect("A valid 400 response should be produced"),
                 )
             }
         }

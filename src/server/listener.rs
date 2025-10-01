@@ -1,5 +1,5 @@
 use crate::{
-    request::{self, http1_1, HTTPHeaders, HTTPVersion},
+    request::{self, http1_1, HTTPHeaders, HTTPVersion, SyncableStream},
     server::handlers::{HandlerCallError, RequestDispatcher},
 };
 use std::{
@@ -13,9 +13,9 @@ use log::info;
 use crate::request::{Request, RequestParseError};
 
 use super::{
-    handlers::HandlerRegistry,
+    handlers::{DispatcherError, HandlerCallErrorReason, HandlerRegistry},
     request_queue::{RequestQueue, RequestQueueOptions},
-    response::{Response, ResponseStatus},
+    response::{Response, ResponseBuilder, ResponseStatus},
 };
 
 static CARRIAGE_RETURN: &str = "\r\n";
@@ -59,6 +59,12 @@ pub struct HTTPListener {
     config: ListenerConfig,
 }
 
+impl SyncableStream for TcpStream {
+    fn get_type(&self) -> request::SyncableStreamType {
+        request::SyncableStreamType::Tcp
+    }
+}
+
 impl HTTPListener {
     pub fn new(
         ip: IpAddr,
@@ -67,7 +73,8 @@ impl HTTPListener {
         config: ListenerConfig,
     ) -> Self {
         let registry = Arc::new(handler_registry);
-        let request_queue = RequestQueue::new(registry.clone(), RequestQueueOptions::default());
+        let request_queue = RequestQueue::new(registry.clone(), RequestQueueOptions::default())
+            .expect("The threadpool should spawn");
 
         Self {
             ip,
@@ -108,7 +115,10 @@ impl HTTPListener {
 
         let request = request::Request::new(request_head, reader);
 
+        // TODO: pass stream to RequestQueue so that it can write
+        // the response
         self.request_queue.enqueue(request);
+        Ok(())
         //let response = match self.handler_registry.dispatch(&request) {
         //    Ok(res) => res,
         //    Err(HandlerCallError::UnhandlablePath(p)) => Response::new(
@@ -127,8 +137,6 @@ impl HTTPListener {
         //        format!("No handler for {0} to {1:?}", method, path),
         //    ),
         //};
-
-        stream.write_all("Hello, world!".to_string().as_bytes())
     }
 
     fn configure_connection(&self, conn: &TcpStream) -> Result<(), IoError> {
@@ -164,26 +172,5 @@ impl HTTPListener {
         // This iterator will be adavanced to the request body
         let req_lines = &mut message.lines();
         http1_1::parse_req_head(req_lines)
-    }
-
-    fn dispatch(&self, request: Request) -> Response {
-        if let Ok(request_path) = request.head.path.clone().try_into() {
-            match self.handler_registry.get(request.head.method, request_path) {
-                Some(handler) => handler.on_request(&request),
-                None => Response::new(
-                    HTTPVersion::V1_1,
-                    super::response::ResponseStatus::NotFound,
-                    HTTPHeaders::default(),
-                    "No matching handler found".to_string(),
-                ),
-            }
-        } else {
-            Response::new(
-                HTTPVersion::V1_1,
-                ResponseStatus::BadRequest,
-                HTTPHeaders::default(),
-                "Malformed URL path".to_string(),
-            )
-        }
     }
 }

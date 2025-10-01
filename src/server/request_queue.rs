@@ -1,14 +1,19 @@
 use std::{
     collections::VecDeque,
-    io::Error as IoError,
+    io::{Error as IoError, Read, Write},
     sync::{Arc, Condvar, Mutex},
     thread,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
-use crate::request::Request;
+use log::{error, info};
 
-use super::handlers::RequestDispatcher;
+use crate::request::{Request, SyncableStream};
+
+use super::{
+    handlers::{DispatcherError, HandlerCallError, RequestDispatcher},
+    response::{Response, ResponseBuilder},
+};
 
 pub struct RequestQueueOptions {
     n_threads: usize,
@@ -25,27 +30,40 @@ impl Default for RequestQueueOptions {
     }
 }
 
-pub trait ThreadPool<I, O, F>
+trait ThreadPool<I>
 where
-    I: Send + Sync,
-    O: Send + Sync,
-    F: Fn(I) -> O + Send + Sync + 'static,
+    I: Send + Sync + 'static,
 {
     fn enqueue(&mut self, to_process: I);
 
-    fn spawn_all(
+    fn spawn_all<F>(
         &mut self,
-        mut callback: F,
+        callback: F,
         work: Arc<SynchronisedQueue<I>>,
         n_threads: usize,
-        timeout: Duration,
-    ) -> Result<Vec<thread::JoinHandle<()>>, IoError> {
+    ) -> Result<Vec<thread::JoinHandle<()>>, IoError>
+    where
+        F: Fn(I) + Send + Sync + Clone + 'static,
+    {
+        assert!(n_threads > 0, "{n_threads} is an invalid number of threads");
+
         let mut threads = Vec::with_capacity(n_threads);
-        for _ in 0..n_threads {
+        for worker_num in 0..n_threads {
             let work_ref = Arc::clone(&work);
+            let cb = callback.clone();
             let th = thread::Builder::new().spawn(move || loop {
                 let job = work_ref.pop();
-                callback(job);
+
+                let start_time = SystemTime::now();
+                cb(job);
+                info!(
+                    "Job processed by worker {0} finished in {1} ms",
+                    worker_num,
+                    start_time
+                        .elapsed()
+                        .expect("The clock didn't change during the job")
+                        .as_millis()
+                );
             });
 
             threads.push(th?);
@@ -56,8 +74,7 @@ where
 }
 
 pub struct RequestQueue {
-    threads: Vec<thread::JoinHandle<()>>,
-    timeout: Duration,
+    threads: Option<Vec<thread::JoinHandle<()>>>,
     // FIXME: using my own implementation of a synchronised queue
     // will not be as performant as using a more mature abstraction.
     // This should be swapped out for `crossbeam_channel::unbounded`.
@@ -66,37 +83,46 @@ pub struct RequestQueue {
     reqs: Arc<SynchronisedQueue<Request>>,
 }
 
+impl ThreadPool<Request> for RequestQueue {
+    fn enqueue(&mut self, to_process: Request) {
+        self.reqs.push(to_process)
+    }
+}
+
 impl RequestQueue {
     pub fn new<D: RequestDispatcher + Send + Sync + 'static>(
         dispatcher: Arc<D>,
         opts: RequestQueueOptions,
-    ) -> Self {
+    ) -> Result<Self, IoError> {
         let req_queue = Arc::new(SynchronisedQueue::with_capacity(opts.n_threads));
+        let mut instance = Self {
+            reqs: Arc::clone(&req_queue),
+            threads: None,
+        };
 
-        let mut threads = Vec::new();
-        for _ in 0..opts.n_threads {
-            let queue_ref = Arc::clone(&req_queue);
-            let dispatcher_ref = Arc::clone(&dispatcher);
-            let t = thread::spawn(move || loop {
-                let req = queue_ref.pop();
-                match dispatcher_ref.dispatch(&req) {
-                    Ok(res) => {
-                        // TODO: pass on response to response queue,
-                        println!("Response generated: {res:?}");
-                    }
-                    Err(e) => {
-                        // TODO: pass to error handler function to generate the correct
-                        // response status code + message and push to response queue
-                    }
-                }
-            });
-            threads.push(t);
-        }
-        Self {
-            threads,
-            timeout: opts.timeout,
-            reqs: req_queue,
-        }
+        let dispatcher_ref = Arc::clone(&dispatcher);
+
+        let threads = ThreadPool::spawn_all(
+            &mut instance,
+            move |req| {
+                let response = dispatcher_ref.dispatch(req).unwrap_or_else(|err| {
+                    err.into_response()
+                        .build()
+                        .expect("A valid handler call error response should be produced")
+                });
+                info!("Produced response: {response}");
+                let _ = response
+                    .send()
+                    .inspect_err(|err| error!("Error occurred when sending response {err}"));
+            },
+            req_queue,
+            opts.n_threads,
+        );
+
+        threads.map(|ts| {
+            instance.threads = Some(ts);
+            instance
+        })
     }
 
     pub fn enqueue(&mut self, request: Request) {
