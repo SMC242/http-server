@@ -93,7 +93,6 @@ pub trait BodyReader {
 impl FromStr for Path {
     type Err = ();
     fn from_str(path: &str) -> Result<Path, Self::Err> {
-        println!("Path provided was: {0}", path);
         if path.starts_with('/') {
             Ok(Path::OriginForm(path.to_string()))
         }

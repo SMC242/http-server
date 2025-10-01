@@ -15,7 +15,6 @@ fn parse_start_line(line: &str) -> Result<StartLine, RequestParseError> {
     let parse_path =
         |p| Path::from_str(p).or(Err(RequestParseError::InvalidStartLine("Invalid path")));
 
-    println!("Segments: {0:?}", segments);
     match segments.len() {
         0 => Err(RequestParseError::InvalidStartLine("Empty")),
         1 => Err(RequestParseError::InvalidStartLine("Too few segments")),
