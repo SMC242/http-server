@@ -204,6 +204,7 @@ impl std::fmt::Debug for ResponseBuilder {
             .field("status", &self.status)
             .field("headers", &self.headers)
             .field("body", &self.body)
+            .field("stream", &self.stream.as_ref().map(|s| s.get_type()))
             .finish()
     }
 }
@@ -323,6 +324,7 @@ impl std::fmt::Debug for Response {
             .field("status", &self.status)
             .field("headers", &self.headers)
             .field("body", &self.body)
+            .field("stream", &self.stream.get_type())
             .finish()
     }
 }
