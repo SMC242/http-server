@@ -250,21 +250,16 @@ impl ResponseBuilder {
     }
 
     pub fn build(self) -> Result<Response, &'static str> {
-        Ok(Response {
-            version: self
-                .version
+        Ok(Response::new(
+            self.version
                 .ok_or("Can't construct a Response without a version")?,
-            status: self
-                .status
+            self.status
                 .ok_or("Can't construct a Response without a status")?,
-            headers: self.headers.unwrap_or_default(),
-            body: self
-                .body
-                .ok_or("Can't construct a Response without a body")?,
-            stream: self
-                .stream
+            self.headers.unwrap_or_default(),
+            self.body.unwrap_or_default(),
+            self.stream
                 .ok_or("Can't construct a Response without a stream")?,
-        })
+        ))
     }
 
     /// Helper method to set a header
