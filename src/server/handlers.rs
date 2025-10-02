@@ -163,7 +163,7 @@ impl DispatcherError for HandlerCallError {
     }
 
     fn into_response(self) -> ResponseBuilder {
-        let builder = ResponseBuilder::new()
+        let builder = ResponseBuilder::default()
             .version(self.http_version)
             .stream(self.stream);
 

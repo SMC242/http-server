@@ -209,16 +209,6 @@ impl std::fmt::Debug for ResponseBuilder {
 }
 
 impl ResponseBuilder {
-    pub fn new() -> Self {
-        Self {
-            version: None,
-            status: None,
-            headers: None,
-            body: None,
-            stream: None,
-        }
-    }
-
     pub fn version(mut self, version: HTTPVersion) -> Self {
         self.version = Some(version);
         self
@@ -301,6 +291,12 @@ impl ResponseBuilder {
     }
 }
 
+impl Default for ResponseBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl From<Request> for ResponseBuilder {
     fn from(value: Request) -> Self {
         let Request {
@@ -308,7 +304,7 @@ impl From<Request> for ResponseBuilder {
             ..
         } = value;
         let stream = value.into_stream();
-        ResponseBuilder::new().version(version).stream(stream)
+        ResponseBuilder::default().version(version).stream(stream)
     }
 }
 
