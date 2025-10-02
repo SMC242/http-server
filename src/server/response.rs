@@ -448,8 +448,10 @@ pub fn format_http1_x(res: &Response) -> String {
                 s
             });
 
+    // There will be a trailing newline from the headers, so only 1 newline
+    // here
     format!(
-        "{0} {1} {2}\n{3}\n\n{4}",
+        "{0} {1} {2}\r\n{3}\r\n{4}",
         res.version,
         res.status.to_code(),
         res.status,
