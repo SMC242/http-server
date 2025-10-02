@@ -83,10 +83,14 @@ fn test_get_endpoint() {
         .expect("Calling the /dogs endpoint should succeed");
     assert_ok(&response);
 
-    let dog_names = response
+    let raw_body = response
         .body_mut()
-        .read_json::<rest_api::DogStore>()
-        .expect("GET /dogs should return valid JSON");
+        .read_to_string()
+        .expect("Reading the body should succeed");
+    log::debug!("Received raw body: {raw_body}");
+
+    let dog_names: rest_api::DogStore =
+        serde_json::from_str(&raw_body).expect("GET /dogs should return valid JSON");
 
     let empty_vec: Vec<String> = vec![];
     assert_eq!(
@@ -151,13 +155,18 @@ fn test_post_endpoint() {
         "The POST request should fail with status 409 Conflict"
     );
 
-    let dog_names = agent
+    let raw_body = agent
         .get(qualify(&base_url, "dogs"))
         .call()
-        .expect("Calling the /dogs endpoint should succeed")
+        .expect("GET /dogs should succeed")
         .body_mut()
-        .read_json::<rest_api::DogStore>()
-        .expect("GET /dogs should return valid JSON");
+        .read_to_string()
+        .expect("Reading the body should succeed");
+    log::debug!("Received raw body: {raw_body}");
+
+    let dog_names: rest_api::DogStore =
+        serde_json::from_str(&raw_body).expect("GET /dogs should return valid JSON");
+
     let expected = vec!["Alfred"];
     log::debug!("Structure: {dog_names:?}, expected: {expected:?}");
     assert_eq!(
