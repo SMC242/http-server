@@ -23,5 +23,5 @@ It is not intended for production use
 - Middleware support: should be a small change to `RequestQueue` as `Handler` already supports it
 - IDN support: currently I am assuming that hostnames are in ASCII
 - HTTP 2 support
-- SSL support
+- TLS support
 - HTTP 3 support: the interfaces have been written with this in mind (HTTP 3 uses QUIC instead of TCP as the transport protocol)
