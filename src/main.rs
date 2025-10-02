@@ -4,8 +4,8 @@ use server::listener::{self, ListenerConfig};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex};
 
-mod dog_crud_example;
-use dog_crud_example::{self as dogstore, DogStoreGetHandler, DogStorePostHandler};
+mod _crud_example;
+use _crud_example::{self as dogstore, DogStoreGetHandler, DogStorePostHandler};
 mod mime;
 mod request;
 mod server;

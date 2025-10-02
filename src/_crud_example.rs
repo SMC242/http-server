@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -13,7 +13,7 @@ use crate::{
     },
 };
 
-#[derive(Default, Serialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct DogStore {
     pub names: Vec<String>,
 }
@@ -56,10 +56,10 @@ impl Handler for DogStoreGetHandler {
         HandlerResult::Done(
             ResponseBuilder::from(req)
                 .ok()
-                .headers(HashMap::from([
-                    ("Content-Type".to_string(), "application/json".to_string()),
-                    ("Content-Length".to_string(), jsonified.len().to_string()),
-                ]))
+                .headers(HashMap::from([(
+                    "Content-Type".to_string(),
+                    "application/json".to_string(),
+                )]))
                 .body(jsonified)
                 .build()
                 .expect("A valid response should be created"),
@@ -110,10 +110,10 @@ impl Handler for DogStorePostHandler {
                     store.add(&dog_name);
                     HandlerResult::Done(
                         ResponseBuilder::from(req)
-                            .ok()
+                            .status(ResponseStatus::Created)
                             .body("Added".to_string())
                             .build()
-                            .expect("A valid 200 response should be produced"),
+                            .expect("A valid 201 response should be produced"),
                     )
                 }
             }
