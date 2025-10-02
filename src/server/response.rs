@@ -189,6 +189,7 @@ impl ResponseStatus {
     }
 }
 
+#[derive(Default)]
 pub struct ResponseBuilder {
     version: Option<HTTPVersion>,
     status: Option<ResponseStatus>,
@@ -289,12 +290,6 @@ impl ResponseBuilder {
     pub fn internal_error(mut self) -> Self {
         self.status = Some(ResponseStatus::InternalServerError);
         self
-    }
-}
-
-impl Default for ResponseBuilder {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
