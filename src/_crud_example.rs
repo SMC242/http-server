@@ -97,7 +97,19 @@ impl Handler for DogStorePostHandler {
 
         match req.read_body_json() {
             Ok(body) => {
-                let dog_name = body["name"].to_string();
+                let dog_name = match body["name"].as_str() {
+                    Some(name) => name.to_string(),
+                    None => {
+                        return HandlerResult::Done(
+                            ResponseBuilder::from(req)
+                                .bad_request()
+                                .body("Invalid field name".to_string())
+                                .build()
+                                .expect("A valid 400 response should be produced"),
+                        )
+                    }
+                };
+
                 if store.names.contains(&dog_name) {
                     HandlerResult::Done(
                         ResponseBuilder::from(req)
