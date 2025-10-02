@@ -376,7 +376,7 @@ impl Response {
         self.headers.extend(headers)
     }
 
-    pub fn upsert_header(&mut self, k: String, v: String) {
+    pub fn insert_if_absent(&mut self, k: String, v: String) {
         self.headers.entry(k.to_lowercase()).or_insert(v);
     }
 
@@ -411,7 +411,7 @@ impl Display for Response {
 
 pub fn ensure_headers(res: &mut Response) {
     if !res.body.is_empty() {
-        res.upsert_header("Content-Length".to_string(), res.body.len().to_string());
+        res.insert_if_absent("Content-Length".to_string(), res.body.len().to_string());
 
         if let Some(ct) = res.get_header("Content-Type".to_string()) {
             if !ct.contains("charset") {
