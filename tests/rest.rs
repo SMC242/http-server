@@ -145,8 +145,11 @@ fn test_post_endpoint() {
         .post(qualify(&base_url, "dogs"))
         .header("Content-Type", "application/json")
         .send_json(&new_name)
-        .expect("POSTing to the endpoint should succeed");
-    assert_eq!(response.status(), http::StatusCode::CONFLICT);
+        .expect_err("POSTing a dog that already exists should fail");
+    assert!(
+        matches!(response, ureq::Error::StatusCode(409)),
+        "The POST request should fail with status 409 Conflict"
+    );
 
     let dog_names = agent
         .get(qualify(&base_url, "dogs"))
