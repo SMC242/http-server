@@ -337,13 +337,15 @@ impl Response {
         body: String,
         stream: Box<dyn SyncableStream>,
     ) -> Self {
-        Self {
+        let mut obj = Self {
             version,
             status,
             headers,
             body,
             stream,
-        }
+        };
+        ensure_headers(&mut obj);
+        obj
     }
 
     pub fn version(&self) -> HTTPVersion {
@@ -388,7 +390,6 @@ impl Response {
     }
 
     pub fn send(mut self) -> Result<(), IoError> {
-        ensure_headers(&mut self);
         write!(self.stream, "{0}", self.format())
     }
 }
