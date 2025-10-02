@@ -35,6 +35,7 @@ where
     I: Send + Sync + 'static,
 {
     fn enqueue(&mut self, to_process: I);
+    fn kill_all(&mut self);
 
     fn spawn_all<F>(
         &mut self,
@@ -87,6 +88,14 @@ impl ThreadPool<Request> for RequestQueue {
     fn enqueue(&mut self, to_process: Request) {
         self.reqs.push(to_process)
     }
+
+    fn kill_all(&mut self) {
+        if let Some(threads) = self.threads.take() {
+            for th in threads {
+                th.join().expect("Failed to join thread");
+            }
+        }
+    }
 }
 
 impl RequestQueue {
@@ -127,6 +136,12 @@ impl RequestQueue {
 
     pub fn enqueue(&mut self, request: Request) {
         self.reqs.push(request)
+    }
+}
+
+impl Drop for RequestQueue {
+    fn drop(&mut self) {
+        self.kill_all();
     }
 }
 
