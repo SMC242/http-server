@@ -462,3 +462,178 @@ pub fn format_http1_x(res: &Response) -> String {
         res.body
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, io::Cursor};
+
+    use super::*;
+
+    fn make_stream() -> Box<Cursor<Vec<u8>>> {
+        Box::new(Cursor::new(Vec::new()))
+    }
+
+    fn setup() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    #[test]
+    fn test_format_http_0_9() {
+        setup();
+
+        let res = ResponseBuilder::default()
+            .version(HTTPVersion::V0_9)
+            .ok()
+            .body("OK".to_string())
+            .stream(make_stream())
+            .build()
+            .expect("An HTTP 0.9 response should be constructed");
+
+        let result = format_http0_9(&res);
+        assert_eq!(result, "OK", "An HTTP 0.9 response is just the body");
+    }
+
+    #[test]
+    fn test_format_http_1_0_no_body() {
+        setup();
+
+        let res = ResponseBuilder::default()
+            .version(HTTPVersion::V1_0)
+            .ok()
+            .stream(make_stream())
+            .build()
+            .expect("An HTTP 1.0 response should be constructed");
+        let result = format_http1_x(&res);
+        log::debug!("Result generated: {result}");
+
+        let mut result_lines = result.lines();
+
+        let status_line: String = result_lines.by_ref().take(1).collect();
+        assert!(!status_line.is_empty());
+        assert_eq!(
+            status_line, "HTTP/1.0 200 OK",
+            "The status line should be well-formed and have the correct HTTP version"
+        );
+        assert!(
+            result_lines.collect::<String>().is_empty(),
+            "No body or headers should be added to an HTTP 1.0 response"
+        );
+    }
+
+    #[test]
+    fn test_format_http_1_0_with_body() {
+        setup();
+
+        let res = ResponseBuilder::default()
+            .version(HTTPVersion::V1_0)
+            .ok()
+            .body("Hello world".to_string())
+            .stream(make_stream())
+            .build()
+            .expect("An HTTP 1.0 response should be constructed");
+        let result = format_http1_x(&res);
+        log::debug!("Result generated: {result}");
+
+        let mut result_lines = result.lines();
+
+        let status_line: String = result_lines.by_ref().take(1).collect();
+        assert!(!status_line.is_empty());
+        assert_eq!(
+            status_line, "HTTP/1.0 200 OK",
+            "The status line should be well-formed and have the correct HTTP version"
+        );
+
+        let headers: Vec<&str> = result_lines
+            .by_ref()
+            .take_while(|line| line.contains(':'))
+            .collect();
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0], "Content-Length: 11");
+
+        assert_eq!(result_lines.collect::<String>(), "Hello world");
+    }
+
+    #[test]
+    fn test_format_http_1_0_multiple_headers() {
+        setup();
+
+        let res = ResponseBuilder::default()
+            .version(HTTPVersion::V1_0)
+            .ok()
+            .body("Hello world".to_string())
+            .header("Age", "12")
+            .header("Cache-Control", "max-age=3600")
+            .header("Content-Security-Policy", "default-src 'self'")
+            .header("Retry-After", "Fri, 07 Nov 2014 23:59:59 GMT")
+            .stream(make_stream())
+            .build()
+            .expect("An HTTP 1.0 response should be constructed");
+        let result = format_http1_x(&res);
+        log::debug!("Result generated: {result}");
+
+        let mut result_lines = result.lines();
+        let mut tail = result_lines.by_ref().skip(1); // Skip the status line
+
+        let headers: Vec<&str> = tail
+            .by_ref()
+            .take_while(|line| line.contains(':'))
+            .collect();
+        assert_eq!(
+            headers.len(),
+            5,
+            "There should be exactly 5 headers. Headers: {headers:?}"
+        );
+
+        assert_eq!(
+            tail.collect::<String>(),
+            "Hello world",
+            "The body should be correct"
+        );
+    }
+
+    #[test]
+    fn test_manage_headers() {
+        let mut res = ResponseBuilder::default()
+            .version(HTTPVersion::V1_1)
+            .ok()
+            .stream(make_stream())
+            .build()
+            .expect("An empty OK request should be constructed");
+
+        assert_eq!(
+            res.headers,
+            HashMap::new(),
+            "The headers should be empty initially"
+        );
+
+        res.set_header("Delta-Base".to_string(), "abc".to_string());
+        assert_eq!(
+            res.get_header("Delta-Base".to_string()),
+            Some("abc".to_string()),
+            "Should get the newly-inserted header Delta-Base. Headers: {0:?}",
+            res.headers
+        );
+
+        assert_eq!(
+            res.get_header("Delta-Base".to_string()),
+            Some("abc".to_string()),
+            "get_header should be case-insensitive. Headers: {0:?}",
+            res.headers
+        );
+
+        res.insert_if_absent("Date".to_string(), "42".to_string());
+        assert_eq!(
+            res.get_header("Date".to_string()),
+            Some("42".to_string()),
+            "insert_if_absent should add the header when it doesn't exist. Headers: {0:?}",
+            res.headers
+        );
+        res.insert_if_absent("Date".to_string(), "-42".to_string());
+        assert_eq!(
+            res.get_header("Date".to_string()),
+            Some("42".to_string()),
+            "insert_if_absent should not add the header when it's present. Headers: {0:?}",
+            res.headers
+        );
+    }
+}
