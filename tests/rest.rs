@@ -12,18 +12,18 @@ use serde::Serialize;
 use ureq::Agent;
 
 static IP: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
-// TODO: increment if port is unavailable. Will require this to not be static
-static PORT: u16 = 8008;
 
 struct TestDeps {
     agent: Agent,
     base_url: String,
+    port: u16,
 }
 
 fn setup() -> TestDeps {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let base_url = format!("http://{IP}:{PORT}");
+    let port = rand::random_range(8000..9000);
+    let base_url = format!("http://{IP}:{port}");
     log::debug!("Generated {base_url} as the base URL");
 
     TestDeps {
@@ -32,18 +32,20 @@ fn setup() -> TestDeps {
             .build()
             .into(),
         base_url,
+        port,
     }
 }
 
 fn run_listener(
+    port: u16,
     handlers: Vec<Arc<dyn Handler + Send + Sync>>,
 ) -> std::thread::JoinHandle<Result<(), IoError>> {
     log::info!(target: "listener", "Initialising handlers");
     let registry = HandlerRegistry::new(handlers);
 
-    log::info!(target: "listener", "Starting server on {IP}:{PORT}");
-    thread::spawn(|| {
-        listener::HTTPListener::new(IP, PORT, registry, ListenerConfig::default()).listen()
+    log::info!(target: "listener", "Starting server on {IP}:{port}");
+    thread::spawn(move || {
+        listener::HTTPListener::new(IP, port, registry, ListenerConfig::default()).listen()
     })
 }
 
@@ -63,9 +65,17 @@ fn assert_ok<T>(response: &http::Response<T>) {
 
 #[test]
 fn test_get_endpoint() {
-    let TestDeps { agent, base_url } = setup();
+    let TestDeps {
+        agent,
+        base_url,
+        port,
+    } = setup();
     let dog_store = Arc::new(Mutex::new(rest_api::DogStore::default()));
-    let server_handle = run_listener(vec![Arc::new(rest_api::DogStoreGetHandler::new(dog_store))]);
+    let _ = run_listener(
+        port,
+        vec![Arc::new(rest_api::DogStoreGetHandler::new(dog_store))],
+    );
+    thread::sleep(Duration::from_millis(50));
 
     let mut response = agent
         .get(qualify(&base_url, "dogs"))
@@ -83,9 +93,6 @@ fn test_get_endpoint() {
         dog_names.names, empty_vec,
         "The list of dog names should be empty"
     );
-
-    // FIXME: this will not run if the test fails
-    let _ = server_handle.join();
 }
 
 #[derive(Debug, Serialize)]
@@ -95,12 +102,20 @@ struct NewDogName {
 
 #[test]
 fn test_post_endpoint() {
-    let TestDeps { agent, base_url } = setup();
+    let TestDeps {
+        agent,
+        base_url,
+        port,
+    } = setup();
     let dog_store = Arc::new(Mutex::new(rest_api::DogStore::default()));
-    let server_handle = run_listener(vec![
-        Arc::new(rest_api::DogStoreGetHandler::new(dog_store.clone())),
-        Arc::new(rest_api::DogStorePostHandler::new(dog_store.clone())),
-    ]);
+    let _ = run_listener(
+        port,
+        vec![
+            Arc::new(rest_api::DogStoreGetHandler::new(dog_store.clone())),
+            Arc::new(rest_api::DogStorePostHandler::new(dog_store.clone())),
+        ],
+    );
+    thread::sleep(Duration::from_millis(50));
 
     let new_name = NewDogName {
         name: "Alfred".to_string(),
@@ -146,7 +161,4 @@ fn test_post_endpoint() {
         dog_names.names, expected,
         "Alfred should still be in the store"
     );
-
-    // FIXME: this will not run if the test fails
-    let _ = server_handle.join();
 }
