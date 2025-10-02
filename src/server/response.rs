@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::char::ToUppercase;
 use std::fmt::Write as _;
 use std::io::{Error as IoError, Write};
 use std::{borrow::Cow, fmt::Display};
@@ -229,7 +230,12 @@ impl ResponseBuilder {
     }
 
     pub fn headers(mut self, headers: HTTPHeaders) -> Self {
-        self.headers = Some(headers);
+        self.headers = Some(
+            headers
+                .into_iter()
+                .map(|(k, v)| (k.to_lowercase(), v))
+                .collect(),
+        );
         self
     }
 
@@ -426,12 +432,30 @@ pub fn format_http0_9(res: &Response) -> &String {
     &res.body
 }
 
+fn title_case_header(s: &str) -> String {
+    let mut new_s = String::with_capacity(s.len());
+    let words = s.split('-');
+
+    for (i, word) in words.enumerate() {
+        if i != 0 {
+            new_s.push('-');
+        }
+
+        let mut word_chars = word.chars();
+        if let Some(head) = word_chars.next() {
+            head.to_uppercase().for_each(|c| new_s.push(c));
+            word_chars.for_each(|c| new_s.push(c));
+        }
+    }
+    new_s
+}
+
 pub fn format_http1_x(res: &Response) -> String {
     let stringified_headers: String =
         res.headers
             .iter()
             .fold(String::new(), |mut s, (key, value)| {
-                let _ = write!(s, "{key}: {value}");
+                let _ = write!(s, "{0}: {value}\r\n", title_case_header(key));
                 s
             });
 
