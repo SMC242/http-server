@@ -30,17 +30,24 @@ impl Default for RequestQueueOptions {
     }
 }
 
+enum ThreadPoolMessage<T> {
+    /// Work to pass to the `ThreadPool`'s callback
+    Work(T),
+    /// Shutdown signal
+    Die,
+}
+
 trait ThreadPool<I>
 where
     I: Send + Sync + 'static,
 {
     fn enqueue(&mut self, to_process: I);
-    fn kill_all(&mut self);
+    fn shutdown(&mut self);
 
     fn spawn_all<F>(
         &mut self,
         callback: F,
-        work: Arc<SynchronisedQueue<I>>,
+        work: Arc<SynchronisedQueue<ThreadPoolMessage<I>>>,
         n_threads: usize,
     ) -> Result<Vec<thread::JoinHandle<()>>, IoError>
     where
@@ -53,18 +60,26 @@ where
             let work_ref = Arc::clone(&work);
             let cb = callback.clone();
             let th = thread::Builder::new().spawn(move || loop {
-                let job = work_ref.pop();
+                let message = work_ref.pop();
 
-                let start_time = SystemTime::now();
-                cb(job);
-                info!(
-                    "Job processed by worker {0} finished in {1} ms",
-                    worker_num,
-                    start_time
-                        .elapsed()
-                        .expect("The clock didn't change during the job")
-                        .as_millis()
-                );
+                match message {
+                    ThreadPoolMessage::Work(job) => {
+                        let start_time = SystemTime::now();
+                        cb(job);
+                        info!(
+                            "Job processed by worker {0} finished in {1} ms",
+                            worker_num,
+                            start_time
+                                .elapsed()
+                                .expect("The clock didn't change during the job")
+                                .as_millis()
+                        );
+                    }
+                    ThreadPoolMessage::Die => {
+                        info!("Shutting down worker {worker_num}");
+                        break;
+                    }
+                }
             });
 
             threads.push(th?);
@@ -81,20 +96,16 @@ pub struct RequestQueue {
     // This should be swapped out for `crossbeam_channel::unbounded`.
     // I chose to implement my own version to learn about synchronisation
     // and borrow-checking in Rust
-    reqs: Arc<SynchronisedQueue<Request>>,
+    reqs: Arc<SynchronisedQueue<ThreadPoolMessage<Request>>>,
 }
 
 impl ThreadPool<Request> for RequestQueue {
     fn enqueue(&mut self, to_process: Request) {
-        self.reqs.push(to_process)
+        self.reqs.push(ThreadPoolMessage::Work(to_process))
     }
 
-    fn kill_all(&mut self) {
-        if let Some(threads) = self.threads.take() {
-            for th in threads {
-                th.join().expect("Failed to join thread");
-            }
-        }
+    fn shutdown(&mut self) {
+        self.reqs.push(ThreadPoolMessage::Die);
     }
 }
 
@@ -133,15 +144,15 @@ impl RequestQueue {
             instance
         })
     }
-
-    pub fn enqueue(&mut self, request: Request) {
-        self.reqs.push(request)
-    }
 }
 
 impl Drop for RequestQueue {
     fn drop(&mut self) {
-        self.kill_all();
+        if let Some(threads) = self.threads.take() {
+            for th in threads {
+                th.join().expect("The thread should join");
+            }
+        }
     }
 }
 
