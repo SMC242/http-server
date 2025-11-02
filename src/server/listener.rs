@@ -43,13 +43,24 @@ where
 #[derive(Debug)]
 pub struct ListenerConfig {
     timeout: Option<std::time::Duration>,
+    /// Enable this when running the listener inside tests.
+    /// Disables the CTRL + C signal as the ctrlc crate doesn't
+    /// allow multiple handlers to be registered at the same time
+    is_test: bool,
 }
 
 impl Default for ListenerConfig {
     fn default() -> Self {
         Self {
             timeout: Some(std::time::Duration::new(10, 0)),
+            is_test: false,
         }
+    }
+}
+
+impl ListenerConfig {
+    pub fn new(timeout: Option<std::time::Duration>, is_test: bool) -> Self {
+        Self { timeout, is_test }
     }
 }
 
@@ -107,7 +118,7 @@ impl HTTPListener {
         let _ = TcpStream::connect(format!("{0}:{1}", ip, port));
     }
 
-    pub fn listen(&mut self) -> std::io::Result<()> {
+    fn create_signal_handler(&self) {
         let signal_ref = Arc::clone(&self.shutdown_signal);
         let (owned_ip, owned_port) = (self.ip, self.port);
         ctrlc::set_handler(move || {
@@ -116,6 +127,12 @@ impl HTTPListener {
             HTTPListener::dummy_request(owned_ip, owned_port);
         })
         .expect("The CTRL + C interrupt handler should spawn");
+    }
+
+    pub fn listen(&mut self) -> std::io::Result<()> {
+        if !self.config.is_test {
+            self.create_signal_handler();
+        }
 
         let result = listen(
             self.ip,
