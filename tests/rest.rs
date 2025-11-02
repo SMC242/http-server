@@ -43,10 +43,10 @@ fn run_listener(
     log::info!(target: "listener", "Initialising handlers");
     let registry = HandlerRegistry::new(handlers);
 
+    let config = ListenerConfig::new(Some(std::time::Duration::new(10, 0)), true);
+
     log::info!(target: "listener", "Starting server on {IP}:{port}");
-    thread::spawn(move || {
-        listener::HTTPListener::new(IP, port, registry, ListenerConfig::default()).listen()
-    })
+    thread::spawn(move || listener::HTTPListener::new(IP, port, registry, config).listen())
 }
 
 fn qualify(base_url: &str, segment: &str) -> String {
