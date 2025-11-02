@@ -15,7 +15,7 @@ It is not intended for production use
   - [x] HTTP 1.1
 - Multi-threading: a thread pool is used
   - I chose to write my own synchronised queue to push myself with the borrow checker and expose myself to Rust's synchronisation primitives
-  - This is less efficient than using a [MPSC channel](https://doc.rust-lang.org/std/sync/mpsc/index.html) like the [Rust book does](https://doc.rust-lang.org/book/ch21-02-multithreaded.html#sending-requests-to-threads-via-channels)
+  - This is less efficient than using a [MPSC channel](https://doc.rust-lang.org/std/sync/mpsc/index.html) like most sources recommend
 - Support for arbitary route handlers via the `Handler` trait
 
 ## Planned features
@@ -25,3 +25,5 @@ It is not intended for production use
 - HTTP 2 support
 - TLS support
 - HTTP 3 support: the interfaces have been written with this in mind (HTTP 3 uses QUIC instead of TCP as the transport protocol)
+- Concurrency improvements: move request parsing from the main thread to the worker threads and use non-blocking TCP sockets
+  - This will [drastically increase the maximum concurrent requests](https://stackoverflow.com/a/10654365)
