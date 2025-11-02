@@ -1,33 +1,40 @@
-use crate::{
-    request::{self, http1_1, HTTPHeaders, HTTPVersion},
-    server::handlers::HandlerCallError,
-};
+use crate::request::{self, http1_1, SyncableStream};
 use std::{
-    io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write},
+    io::{BufRead, BufReader, Error as IoError, ErrorKind, Read},
     net::{IpAddr, TcpListener, TcpStream},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use log::info;
 
-use crate::request::{Request, RequestParseError};
+use crate::request::RequestParseError;
 
 use super::{
     handlers::HandlerRegistry,
-    response::{Response, ResponseStatus},
+    request_queue::{RequestQueue, RequestQueueOptions, ThreadPool},
 };
 
 static CARRIAGE_RETURN: &str = "\r\n";
 
 /// A low-level function for receiving and operating on TCP connections.
 /// Use `Listener` for a higher level interface
-pub fn listen<E, F>(ip: IpAddr, port: u16, mut on_stream: F) -> std::io::Result<()>
+pub fn listen<E, F>(
+    ip: IpAddr,
+    port: u16,
+    shutdown: Arc<AtomicBool>,
+    mut on_stream: F,
+) -> std::io::Result<()>
 where
     F: FnMut(TcpStream) -> Result<(), E>,
     E: std::fmt::Debug,
 {
     let listener = TcpListener::bind((ip, port))?;
-    for stream in listener.incoming() {
-        let _ = on_stream(stream?)
+
+    while !shutdown.load(Ordering::Acquire) {
+        let _ = on_stream(listener.accept()?.0)
             .inspect_err(|err| println!("Error occurred in on_stream: {0:?}", err));
     }
     Ok(())
@@ -36,13 +43,24 @@ where
 #[derive(Debug)]
 pub struct ListenerConfig {
     timeout: Option<std::time::Duration>,
+    /// Enable this when running the listener inside tests.
+    /// Disables the CTRL + C signal as the ctrlc crate doesn't
+    /// allow multiple handlers to be registered at the same time
+    is_test: bool,
 }
 
 impl Default for ListenerConfig {
     fn default() -> Self {
         Self {
             timeout: Some(std::time::Duration::new(10, 0)),
+            is_test: false,
         }
+    }
+}
+
+impl ListenerConfig {
+    pub fn new(timeout: Option<std::time::Duration>, is_test: bool) -> Self {
+        Self { timeout, is_test }
     }
 }
 
@@ -52,8 +70,16 @@ impl Default for ListenerConfig {
 pub struct HTTPListener {
     ip: IpAddr,
     port: u16,
-    handler_registry: HandlerRegistry,
+    request_queue: RequestQueue,
     config: ListenerConfig,
+    // This will be written to at most once but read every time there is a new connection
+    shutdown_signal: Arc<AtomicBool>,
+}
+
+impl SyncableStream for TcpStream {
+    fn get_type(&self) -> request::SyncableStreamType {
+        request::SyncableStreamType::Tcp
+    }
 }
 
 impl HTTPListener {
@@ -63,21 +89,64 @@ impl HTTPListener {
         handler_registry: HandlerRegistry,
         config: ListenerConfig,
     ) -> Self {
+        let request_queue =
+            RequestQueue::new(Arc::new(handler_registry), RequestQueueOptions::default())
+                .expect("The threadpool should spawn");
+
         Self {
             ip,
             port,
-            handler_registry,
             config,
+            request_queue,
+            shutdown_signal: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    pub fn listen(&self) -> std::io::Result<()> {
-        listen(self.ip, self.port, |mut conn| {
-            self.handle_connection(&mut conn)
-        })
+    /// Send the signal to stop processing new TCP connections and already-accepted requests
+    pub fn shutdown(&mut self) {
+        log::info!("Shutting down listener. Source: shutdown() call");
+
+        self.shutdown_signal.store(true, Ordering::Release);
+        HTTPListener::dummy_request(self.ip, self.port);
+        self.request_queue.shutdown();
     }
 
-    fn handle_connection(&self, stream: &mut TcpStream) -> Result<(), IoError> {
+    /// Open a TCP connection to the server to make it re-evaluate the loop condition
+    /// This is stupid!
+    /// See https://users.rust-lang.org/t/how-to-properly-close-a-tcplistener-in-multi-thread-server/87376/14
+    fn dummy_request(ip: IpAddr, port: u16) {
+        let _ = TcpStream::connect(format!("{0}:{1}", ip, port));
+    }
+
+    fn create_signal_handler(&self) {
+        let signal_ref = Arc::clone(&self.shutdown_signal);
+        let (owned_ip, owned_port) = (self.ip, self.port);
+        ctrlc::set_handler(move || {
+            log::info!("Shutting down listener. Source: interrupt handler");
+            signal_ref.store(true, Ordering::Release);
+            HTTPListener::dummy_request(owned_ip, owned_port);
+        })
+        .expect("The CTRL + C interrupt handler should spawn");
+    }
+
+    pub fn listen(&mut self) -> std::io::Result<()> {
+        if !self.config.is_test {
+            self.create_signal_handler();
+        }
+
+        let result = listen(
+            self.ip,
+            self.port,
+            Arc::clone(&self.shutdown_signal),
+            |mut conn| self.handle_connection(&mut conn),
+        );
+
+        // This will run after the shutdown signal has been received via CTRL + C
+        self.request_queue.shutdown();
+        result
+    }
+
+    fn handle_connection(&mut self, stream: &mut TcpStream) -> Result<(), IoError> {
         let client_ip: String = stream
             .peer_addr()
             .map(|addr| addr.to_string())
@@ -101,25 +170,8 @@ impl HTTPListener {
 
         let request = request::Request::new(request_head, reader);
 
-        let response = match self.handler_registry.dispatch(&request) {
-            Ok(res) => res,
-            Err(HandlerCallError::UnhandlablePath(p)) => Response::new(
-                HTTPVersion::V1_1,
-                ResponseStatus::InternalServerError,
-                HTTPHeaders::default(),
-                format!(
-                    "Can't dispatch to path {0:?}. HTTP method: {1}",
-                    p, request.head.method
-                ),
-            ),
-            Err(HandlerCallError::NoCompatibleHandler(method, path)) => Response::new(
-                HTTPVersion::V1_1,
-                ResponseStatus::NotFound,
-                HTTPHeaders::default(),
-                format!("No handler for {0} to {1:?}", method, path),
-            ),
-        };
-        stream.write_all(response.to_string().as_bytes())
+        self.request_queue.enqueue(request);
+        Ok(())
     }
 
     fn configure_connection(&self, conn: &TcpStream) -> Result<(), IoError> {
@@ -155,26 +207,5 @@ impl HTTPListener {
         // This iterator will be adavanced to the request body
         let req_lines = &mut message.lines();
         http1_1::parse_req_head(req_lines)
-    }
-
-    fn dispatch(&self, request: Request) -> Response {
-        if let Ok(request_path) = request.head.path.clone().try_into() {
-            match self.handler_registry.get(request.head.method, request_path) {
-                Some(handler) => handler.on_request(&request),
-                None => Response::new(
-                    HTTPVersion::V1_1,
-                    super::response::ResponseStatus::NotFound,
-                    HTTPHeaders::default(),
-                    "No matching handler found".to_string(),
-                ),
-            }
-        } else {
-            Response::new(
-                HTTPVersion::V1_1,
-                ResponseStatus::BadRequest,
-                HTTPHeaders::default(),
-                "Malformed URL path".to_string(),
-            )
-        }
     }
 }

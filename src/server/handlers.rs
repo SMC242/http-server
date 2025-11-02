@@ -1,9 +1,12 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-use crate::request::{HTTPMethod, Path, Request, RequestHead};
+use crate::request::{HTTPMethod, HTTPVersion, Path, Request, RequestHead, SyncableStream};
 use crate::server::response::Response;
+
+use super::response::{ResponseBuilder, ResponseStatus};
 
 static KEY_DELIMITER: &str = "[##]";
 
@@ -51,11 +54,22 @@ impl TryFrom<Path> for HandlerPath {
     }
 }
 
+/// Handlers will return a `Done` if finished (I.E a response has been generated)
+/// or a `Continue` containing the potentially-modified `Request`
+/// if the next handler should continue processing the request.
+/// All endpoints must return a `Done` while middleware may return either
+pub enum HandlerResult {
+    Done(Response),
+    Continue(Request),
+}
+
 pub trait Handler {
     fn get_path(&self) -> &HandlerPath;
     fn get_method(&self) -> &HTTPMethod;
-    fn on_request(&self, req: &Request) -> Response;
+    fn on_request(&self, req: Request) -> HandlerResult;
 }
+
+type SyncableHandler = dyn Handler + Send + Sync;
 
 /**
    A composite key from a handler. This is necessary because paths can be reused for
@@ -63,6 +77,16 @@ pub trait Handler {
 */
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 struct HandlerRegistryKey(String);
+
+impl From<&SyncableHandler> for HandlerRegistryKey {
+    fn from(handler: &SyncableHandler) -> Self {
+        Self(format!(
+            "{0}{KEY_DELIMITER}{1}",
+            handler.get_method(),
+            handler.get_path().0
+        ))
+    }
+}
 
 impl From<&dyn Handler> for HandlerRegistryKey {
     fn from(handler: &dyn Handler) -> Self {
@@ -83,7 +107,7 @@ impl From<(HTTPMethod, String)> for HandlerRegistryKey {
 #[derive(Default)]
 pub struct HandlerRegistry {
     // TODO: figure out how to efficiently discriminate between HTTP methods
-    handlers: HashMap<HandlerRegistryKey, Arc<dyn Handler>>,
+    handlers: HashMap<HandlerRegistryKey, Arc<SyncableHandler>>,
 }
 
 #[derive(Debug)]
@@ -93,15 +117,80 @@ pub enum HandlerRegistryAddError {
 }
 
 #[derive(Debug)]
-pub enum HandlerCallError {
+pub enum HandlerCallErrorReason {
     /// Paths that can't be converted to origin form.
     /// The server needs to know where to route to
     UnhandlablePath(Path),
     NoCompatibleHandler(HTTPMethod, Path),
 }
 
+pub struct HandlerCallError {
+    pub reason: HandlerCallErrorReason,
+    stream: Box<dyn SyncableStream>,
+    pub http_version: HTTPVersion,
+    pub path: Path,
+}
+
+impl std::fmt::Debug for HandlerCallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HandlerCallError")
+            .field("reason", &self.reason)
+            .field("http_version", &self.http_version)
+            .field("path", &self.path)
+            .field("stream", &self.stream.get_type())
+            .finish()
+    }
+}
+
+pub trait DispatcherError {
+    fn as_status_code(&self) -> ResponseStatus;
+    fn into_response(self) -> ResponseBuilder;
+}
+
+pub trait RequestDispatcher {
+    type Error: DispatcherError;
+
+    fn add(&mut self, handler: Arc<SyncableHandler>) -> Result<(), HandlerRegistryAddError>;
+    fn dispatch(&self, request: Request) -> Result<Response, Self::Error>;
+}
+
+impl DispatcherError for HandlerCallError {
+    fn as_status_code(&self) -> ResponseStatus {
+        match self.reason {
+            HandlerCallErrorReason::UnhandlablePath(_)
+            | HandlerCallErrorReason::NoCompatibleHandler(_, _) => ResponseStatus::NotFound,
+        }
+    }
+
+    fn into_response(self) -> ResponseBuilder {
+        let builder = ResponseBuilder::default()
+            .version(self.http_version)
+            .stream(self.stream);
+
+        match self.reason {
+            HandlerCallErrorReason::UnhandlablePath(path) => builder
+                .bad_request()
+                .body(format!("Malformed URL path {path}")),
+            HandlerCallErrorReason::NoCompatibleHandler(httpmethod, ref path) => builder
+                .not_found()
+                .body(format!("No matching handler found for {httpmethod} {path}")),
+        }
+    }
+}
+
+impl HandlerCallError {
+    pub fn new(reason: HandlerCallErrorReason, req: Request) -> Self {
+        Self {
+            reason,
+            http_version: req.head.version,
+            path: req.head.path.clone(),
+            stream: req.into_stream(),
+        }
+    }
+}
+
 impl HandlerRegistry {
-    pub fn new(handlers: Vec<Arc<dyn Handler>>) -> Self {
+    pub fn new(handlers: Vec<Arc<SyncableHandler>>) -> Self {
         let mut registry = HashMap::new();
         handlers.into_iter().for_each(|h| {
             let key = { HandlerRegistryKey::from(h.as_ref()) };
@@ -110,7 +199,16 @@ impl HandlerRegistry {
         HandlerRegistry { handlers: registry }
     }
 
-    pub fn add(&mut self, handler: Arc<dyn Handler>) -> Result<(), HandlerRegistryAddError> {
+    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<SyncableHandler>> {
+        self.handlers
+            .get(&HandlerRegistryKey::from((method, path.0)))
+    }
+}
+
+impl RequestDispatcher for HandlerRegistry {
+    type Error = HandlerCallError;
+
+    fn add(&mut self, handler: Arc<SyncableHandler>) -> Result<(), HandlerRegistryAddError> {
         if matches!(
             handler.get_method(),
             HTTPMethod::Trace | HTTPMethod::Connect | HTTPMethod::Options
@@ -130,29 +228,38 @@ impl HandlerRegistry {
         }
     }
 
-    pub fn get(&self, method: HTTPMethod, path: HandlerPath) -> Option<&Arc<dyn Handler>> {
-        self.handlers
-            .get(&HandlerRegistryKey::from((method, path.0)))
-    }
-
-    pub fn dispatch(&self, req: &Request) -> Result<Response, HandlerCallError> {
+    fn dispatch(&self, req: Request) -> Result<Response, HandlerCallError> {
         let RequestHead {
             method, ref path, ..
         } = req.head;
+        let owned_path = path.clone();
+        let mut lazy_req = Some(req);
 
-        let handler_path = path
-            .clone()
-            .try_into()
-            .or(Err(HandlerCallError::UnhandlablePath(path.clone())))?;
-        self.get(method, handler_path)
-            .map(|h| h.on_request(req))
-            .ok_or(HandlerCallError::NoCompatibleHandler(method, path.clone()))
+        let handler_path = owned_path.clone().try_into().or_else(|_| {
+            Err(HandlerCallError::new(
+                HandlerCallErrorReason::UnhandlablePath(owned_path.clone()),
+                lazy_req.take().unwrap(),
+            ))
+        })?;
+        let handler = self.get(method, handler_path).ok_or_else(|| {
+            HandlerCallError::new(
+                HandlerCallErrorReason::NoCompatibleHandler(method, owned_path),
+                lazy_req.take().unwrap(),
+            )
+        })?;
+
+        match handler.on_request(lazy_req.take().unwrap()) {
+            HandlerResult::Done(res) => Ok(res),
+            HandlerResult::Continue(_) => {
+                todo!("Pass the request onto the next Handler")
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::request::HTTPVersion;
+    use crate::{request::HTTPVersion, server::response::ResponseBuilder};
 
     use super::*;
 
@@ -179,12 +286,14 @@ mod tests {
             &self.method
         }
 
-        fn on_request(&self, _req: &Request) -> Response {
-            Response::new(
-                HTTPVersion::V1_1,
-                crate::server::response::ResponseStatus::OK,
-                HashMap::default(),
-                "Hello, world!".to_string(),
+        fn on_request(&self, req: Request) -> HandlerResult {
+            HandlerResult::Done(
+                ResponseBuilder::from(req)
+                    .version(HTTPVersion::V1_1)
+                    .ok()
+                    .body("Hello, world!".to_string())
+                    .build()
+                    .expect("A valid hello world response will be constructed"),
             )
         }
     }
@@ -200,7 +309,7 @@ mod tests {
             &HTTPMethod::Connect
         }
 
-        fn on_request(&self, _req: &Request) -> Response {
+        fn on_request(&self, _req: Request) -> HandlerResult {
             todo!("No handler")
         }
     }
@@ -216,7 +325,7 @@ mod tests {
             &HTTPMethod::Trace
         }
 
-        fn on_request(&self, _req: &Request) -> Response {
+        fn on_request(&self, _req: Request) -> HandlerResult {
             todo!("No handler")
         }
     }
@@ -232,7 +341,7 @@ mod tests {
             &HTTPMethod::Options
         }
 
-        fn on_request(&self, _req: &Request) -> Response {
+        fn on_request(&self, _req: Request) -> HandlerResult {
             todo!("No handler")
         }
     }

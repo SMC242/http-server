@@ -1,10 +1,11 @@
 use super::{headers, http1_1::HTTP1_1BodyReader};
-use crate::request::content_type::MimeParseInfo;
+use crate::{request::content_type::MimeParseInfo, server::response::Response};
 use std::{
     collections::HashMap,
     fmt::Display,
-    io::{BufReader, Read},
+    io::{BufReader, Read, Write},
     str::FromStr,
+    sync::Arc,
 };
 
 /// An arbitrary JSON
@@ -44,13 +45,14 @@ pub struct RequestHead {
 
 pub type RequestBody = Option<String>;
 
-pub struct Request<'a> {
+pub struct Request {
     pub head: RequestHead,
     // NOTE: calls to to read the body should be infrequent enough that the
     // cost of a v-table is insignificant. Realistically, the body will only be read once per
     // request
     // TODO: test what happens if multiple handlers read the body
-    body: Box<dyn BodyReader + 'a>,
+    // FIXME: create a wrapper that stores the body once read
+    body: Box<dyn BodyReader + Send + Sync + 'static>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -71,21 +73,26 @@ pub enum HTTPVersion {
     V3,
 }
 
-pub trait Stream: Send + Sync {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize>;
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
+#[derive(Debug)]
+pub enum SyncableStreamType {
+    Tcp,
+    Quic,
+}
+
+pub trait SyncableStream: Read + Write + Send + Sync + 'static {
+    fn get_type(&self) -> SyncableStreamType;
 }
 
 pub trait BodyReader {
-    fn text(&self, mime_info: &MimeParseInfo) -> Result<String, String>;
-    fn json(&self, mime_info: &MimeParseInfo) -> Result<Json, String>;
+    fn text(&mut self, mime_info: &MimeParseInfo) -> Result<String, String>;
+    fn json(&mut self, mime_info: &MimeParseInfo) -> Result<Json, String>;
+    fn into_stream(self: Box<Self>) -> Box<dyn SyncableStream>;
     // TODO: add multipart parsing. Will require a breaking change
 }
 
 impl FromStr for Path {
     type Err = ();
     fn from_str(path: &str) -> Result<Path, Self::Err> {
-        println!("Path provided was: {0}", path);
         if path.starts_with('/') {
             Ok(Path::OriginForm(path.to_string()))
         }
@@ -106,6 +113,18 @@ impl FromStr for Path {
         } else {
             Err(())
         }
+    }
+}
+
+impl std::fmt::Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let content = match self {
+            Path::OriginForm(path) | Path::AbsoluteForm(path) => path,
+            Path::AuthorityForm(path, port) => &format!("{path}:{port}"),
+            Path::Asterisk => "*",
+        };
+
+        write!(f, "{content}")
     }
 }
 
@@ -182,8 +201,8 @@ impl std::fmt::Display for RequestParseError {
     }
 }
 
-impl<'a> Request<'a> {
-    pub fn new<R: Read + 'a>(head: RequestHead, reader: BufReader<R>) -> Self {
+impl Request {
+    pub fn new<R: SyncableStream>(head: RequestHead, reader: BufReader<R>) -> Self {
         let reader_wrapper = match head.version {
             HTTPVersion::V1_1 | HTTPVersion::V0_9 | HTTPVersion::V1_0 => {
                 HTTP1_1BodyReader::new(reader)
@@ -202,18 +221,22 @@ impl<'a> Request<'a> {
         }
     }
 
-    pub fn read_body_text(&self) -> Result<String, RequestParseError> {
+    pub fn read_body_text(&mut self) -> Result<String, RequestParseError> {
         let mime_info = headers::content_type::parse_mime_info(&self.head.headers)?;
         self.body.text(&mime_info).map_err(|e| {
             RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
         })
     }
 
-    pub fn read_body_json(&self) -> Result<Json, RequestParseError> {
+    pub fn read_body_json(&mut self) -> Result<Json, RequestParseError> {
         let mime_info = headers::content_type::parse_mime_info(&self.head.headers)?;
         self.body.json(&mime_info).map_err(|e| {
             RequestParseError::BodyParseError(format!("Failed to parse body due to '{e}'"))
         })
+    }
+
+    pub fn into_stream(self) -> Box<dyn SyncableStream> {
+        self.body.into_stream()
     }
 }
 
