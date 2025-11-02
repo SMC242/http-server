@@ -1,9 +1,6 @@
-use crate::{
-    request::{self, http1_1, HTTPHeaders, HTTPVersion, SyncableStream},
-    server::handlers::{HandlerCallError, RequestDispatcher},
-};
+use crate::request::{self, http1_1, SyncableStream};
 use std::{
-    io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write},
+    io::{BufRead, BufReader, Error as IoError, ErrorKind, Read},
     net::{IpAddr, TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -13,7 +10,7 @@ use std::{
 
 use log::info;
 
-use crate::request::{Request, RequestParseError};
+use crate::request::RequestParseError;
 
 use super::{
     handlers::HandlerRegistry,
@@ -40,7 +37,6 @@ where
         let _ = on_stream(listener.accept()?.0)
             .inspect_err(|err| println!("Error occurred in on_stream: {0:?}", err));
     }
-    log::debug!("Shutdown signal received in listen(). No longer accepting requests");
     Ok(())
 }
 
@@ -129,7 +125,6 @@ impl HTTPListener {
         );
 
         // This will run after the shutdown signal has been received via CTRL + C
-        log::debug!("Running request queue shutdown");
         self.request_queue.shutdown();
         result
     }

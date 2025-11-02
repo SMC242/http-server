@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    io::{Error as IoError, Read, Write},
+    io::Error as IoError,
     sync::{Arc, Condvar, Mutex},
     thread,
     time::{Duration, SystemTime},
@@ -8,12 +8,9 @@ use std::{
 
 use log::{error, info};
 
-use crate::request::{Request, SyncableStream};
+use crate::request::Request;
 
-use super::{
-    handlers::{DispatcherError, HandlerCallError, RequestDispatcher},
-    response::{Response, ResponseBuilder},
-};
+use super::handlers::{DispatcherError, RequestDispatcher};
 
 pub struct RequestQueueOptions {
     n_threads: usize,
