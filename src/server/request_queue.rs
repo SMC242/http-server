@@ -37,11 +37,12 @@ enum ThreadPoolMessage<T> {
     Die,
 }
 
-trait ThreadPool<I>
+pub trait ThreadPool<I>
 where
     I: Send + Sync + 'static,
 {
     fn enqueue(&mut self, to_process: I);
+    /// Send the signal to stop processing further jobs
     fn shutdown(&mut self);
 
     fn spawn_all<F>(
@@ -105,7 +106,18 @@ impl ThreadPool<Request> for RequestQueue {
     }
 
     fn shutdown(&mut self) {
-        self.reqs.push(ThreadPoolMessage::Die);
+        if let Some(threads) = self.threads.take() {
+            // This is a hack around the fact that there are no "close"
+            // semantics for my queue. Instead, I send a message to each worker
+            // to join
+            for _ in 0..threads.len() {
+                self.reqs.push(ThreadPoolMessage::Die);
+            }
+
+            for th in threads {
+                th.join().expect("The thread should join");
+            }
+        }
     }
 }
 
@@ -148,11 +160,7 @@ impl RequestQueue {
 
 impl Drop for RequestQueue {
     fn drop(&mut self) {
-        if let Some(threads) = self.threads.take() {
-            for th in threads {
-                th.join().expect("The thread should join");
-            }
-        }
+        self.shutdown();
     }
 }
 

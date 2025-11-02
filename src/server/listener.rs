@@ -5,7 +5,10 @@ use crate::{
 use std::{
     io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write},
     net::{IpAddr, TcpListener, TcpStream},
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use log::info;
@@ -13,25 +16,31 @@ use log::info;
 use crate::request::{Request, RequestParseError};
 
 use super::{
-    handlers::{DispatcherError, HandlerCallErrorReason, HandlerRegistry},
-    request_queue::{RequestQueue, RequestQueueOptions},
-    response::{Response, ResponseBuilder, ResponseStatus},
+    handlers::HandlerRegistry,
+    request_queue::{RequestQueue, RequestQueueOptions, ThreadPool},
 };
 
 static CARRIAGE_RETURN: &str = "\r\n";
 
 /// A low-level function for receiving and operating on TCP connections.
 /// Use `Listener` for a higher level interface
-pub fn listen<E, F>(ip: IpAddr, port: u16, mut on_stream: F) -> std::io::Result<()>
+pub fn listen<E, F>(
+    ip: IpAddr,
+    port: u16,
+    shutdown: Arc<AtomicBool>,
+    mut on_stream: F,
+) -> std::io::Result<()>
 where
     F: FnMut(TcpStream) -> Result<(), E>,
     E: std::fmt::Debug,
 {
     let listener = TcpListener::bind((ip, port))?;
-    for stream in listener.incoming() {
-        let _ = on_stream(stream?)
+
+    while !shutdown.load(Ordering::Acquire) {
+        let _ = on_stream(listener.accept()?.0)
             .inspect_err(|err| println!("Error occurred in on_stream: {0:?}", err));
     }
+    log::debug!("Shutdown signal received in listen(). No longer accepting requests");
     Ok(())
 }
 
@@ -54,9 +63,10 @@ impl Default for ListenerConfig {
 pub struct HTTPListener {
     ip: IpAddr,
     port: u16,
-    handler_registry: Arc<HandlerRegistry>,
     request_queue: RequestQueue,
     config: ListenerConfig,
+    // This will be written to at most once but read every time there is a new connection
+    shutdown_signal: Arc<AtomicBool>,
 }
 
 impl SyncableStream for TcpStream {
@@ -72,23 +82,56 @@ impl HTTPListener {
         handler_registry: HandlerRegistry,
         config: ListenerConfig,
     ) -> Self {
-        let registry = Arc::new(handler_registry);
-        let request_queue = RequestQueue::new(registry.clone(), RequestQueueOptions::default())
-            .expect("The threadpool should spawn");
+        let request_queue =
+            RequestQueue::new(Arc::new(handler_registry), RequestQueueOptions::default())
+                .expect("The threadpool should spawn");
 
         Self {
             ip,
             port,
-            handler_registry: registry,
             config,
             request_queue,
+            shutdown_signal: Arc::new(AtomicBool::new(false)),
         }
     }
 
+    /// Send the signal to stop processing new TCP connections and already-accepted requests
+    pub fn shutdown(&mut self) {
+        log::info!("Shutting down listener. Source: shutdown() call");
+
+        self.shutdown_signal.store(true, Ordering::Release);
+        HTTPListener::dummy_request(self.ip, self.port);
+        self.request_queue.shutdown();
+    }
+
+    /// Open a TCP connection to the server to make it re-evaluate the loop condition
+    /// This is stupid!
+    /// See https://users.rust-lang.org/t/how-to-properly-close-a-tcplistener-in-multi-thread-server/87376/14
+    fn dummy_request(ip: IpAddr, port: u16) {
+        let _ = TcpStream::connect(format!("{0}:{1}", ip, port));
+    }
+
     pub fn listen(&mut self) -> std::io::Result<()> {
-        listen(self.ip, self.port, |mut conn| {
-            self.handle_connection(&mut conn)
+        let signal_ref = Arc::clone(&self.shutdown_signal);
+        let (owned_ip, owned_port) = (self.ip, self.port);
+        ctrlc::set_handler(move || {
+            log::info!("Shutting down listener. Source: interrupt handler");
+            signal_ref.store(true, Ordering::Release);
+            HTTPListener::dummy_request(owned_ip, owned_port);
         })
+        .expect("The CTRL + C interrupt handler should spawn");
+
+        let result = listen(
+            self.ip,
+            self.port,
+            Arc::clone(&self.shutdown_signal),
+            |mut conn| self.handle_connection(&mut conn),
+        );
+
+        // This will run after the shutdown signal has been received via CTRL + C
+        log::debug!("Running request queue shutdown");
+        self.request_queue.shutdown();
+        result
     }
 
     fn handle_connection(&mut self, stream: &mut TcpStream) -> Result<(), IoError> {
