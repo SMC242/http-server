@@ -1,7 +1,4 @@
-use std::{
-    io::{BufReader, Cursor, Read},
-    sync::{Arc, Mutex},
-};
+use std::io::{BufReader, Cursor, Read};
 
 use crate::request::content_type::{ContentEncoding, MimeParseInfo};
 use crate::request::types::{BodyReader, Json};
@@ -23,15 +20,15 @@ fn read_body<Stream: Read>(length: u64, reader: &mut BufReader<Stream>) -> Resul
     let expected_length = length.try_into().expect("The server should be 64-bit");
     let mut bytes: Vec<u8> = vec![0; expected_length];
 
-    reader
-        .read_exact(&mut bytes)
-        .or(Err("Could not read from stream"))?;
-
-    let actual_length = bytes.len();
-    if actual_length != expected_length {
-        Err(format!("Content-Length ({expected_length}) is greater than the actual length ({actual_length})"))
-    } else {
-        Ok(bytes)
+    match reader.read_exact(&mut bytes) {
+        Ok(_) => Ok(bytes),
+        Err(err) => match err.kind() {
+            std::io::ErrorKind::UnexpectedEof => Err(format!(
+                "Content-Length ({expected_length}) is greater than the actual length ({0})",
+                bytes.len()
+            )),
+            _ => Err(format!("Could not read from stream due to {err:?}")),
+        },
     }
 }
 
